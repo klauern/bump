@@ -2,6 +2,7 @@ package bump
 
 import (
 	"fmt"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -139,11 +140,6 @@ func GetNextTag(currentTag, bumpType string) (string, error) {
 	return nextTag, nil
 }
 
-// Helper function to safely convert int to string for version parts.
-func intToString(value int) string {
-	return strconv.Itoa(value)
-}
-
 // parseInt safely converts a string to an int. Returns 0 on error.
 func parseInt(s string) int {
 	i, err := strconv.Atoi(s)
@@ -153,4 +149,20 @@ func parseInt(s string) int {
 		return 0
 	}
 	return i
+}
+
+func TagAndPush(repoPath, tag string) error {
+	// Create the new tag
+	cmdTag := exec.Command("git", "tag", tag)
+	if err := cmdTag.Run(); err != nil {
+		return fmt.Errorf("failed to create tag: %w", err)
+	}
+
+	// Push the new tag to the default remote
+	cmdPush := exec.Command("git", "push", "--tags")
+	if err := cmdPush.Run(); err != nil {
+		return fmt.Errorf("failed to push tag: %w", err)
+	}
+
+	return nil
 }

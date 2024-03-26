@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/klauern/bump"
 	"github.com/urfave/cli/v2"
 )
@@ -79,10 +78,9 @@ func bumpVersion(bumpType string) error {
 		return fmt.Errorf("failed to determine next tag: %v", err)
 	}
 
-	// Create and push new tag
-	_, err = repo.CreateTag(nextTag, plumbing.NewHash("HEAD"), nil)
+	err = bump.TagAndPush(repoPath, nextTag)
 	if err != nil {
-		return fmt.Errorf("failed to create tag: %v", err)
+		return fmt.Errorf("failed to tag and push: %v", err)
 	}
 
 	fmt.Printf("Successfully created and pushed tag %s\n", nextTag)
