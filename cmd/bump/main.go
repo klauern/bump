@@ -73,9 +73,15 @@ func bumpVersion(bumpType string) error {
 		return fmt.Errorf("failed to determine latest tag: %v", err)
 	}
 
-	nextTag, err := bump.GetNextTag(latestTag, bumpType)
-	if err != nil {
-		return fmt.Errorf("failed to determine next tag: %v", err)
+	var nextTag string
+	if latestTag != "" {
+		nextTag, err = bump.GetNextTag(latestTag, bumpType)
+		if err != nil {
+			return fmt.Errorf("failed to determine next tag: %v", err)
+		}
+	} else {
+		fmt.Println("No tags found, starting at v0.1.0")
+		nextTag = "v0.1.0"
 	}
 
 	err = bump.TagAndPush(repoPath, nextTag)
