@@ -31,7 +31,7 @@ func main() {
 				},
 			},
 			{
-				name:  "major",
+				Name:  "major",
 				Usage: "Bump the major version",
 				Action: func(c *cli.Context) error {
 					return bumpVersion("major")
