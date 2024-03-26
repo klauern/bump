@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/storer"
 )
 
+// NewGitInfo returns the git version and commit hash of a given path
 func NewGitInfo(path string) ([]string, error) {
 	var versions []string
 
@@ -39,16 +40,17 @@ func NewGitInfo(path string) ([]string, error) {
 	return versions, nil
 }
 
-// Update the regular expression to match optional pre-release and build metadata.
+// semanticVersionRegex is a regular expression for parsing semantic version strings.
 var semanticVersionRegex = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`)
 
-// Include a Suffix field in the tagVersion struct.
+// tagVersion represents a semantic version and its corresponding git tag.
 type tagVersion struct {
 	Major, Minor, Patch int
 	Suffix              string
 	Tag                 string
 }
 
+// parseTagVersion parses a semantic version string into a tagVersion struct.
 func parseTagVersion(tag string) (*tagVersion, bool) {
 	matches := semanticVersionRegex.FindStringSubmatch(tag)
 	if matches == nil {
@@ -87,6 +89,7 @@ func sortVersions(versions []*tagVersion) {
 	})
 }
 
+// GetLatestTag returns the latest tag in a reference iterator.
 func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 	var versions []*tagVersion
 
@@ -110,7 +113,7 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 	return "", nil // No semantic version tags found
 }
 
-// getNextTag takes the current latest tag and the bump type (major, minor, patch)
+// GetNextTag takes the current latest tag and the bump type (major, minor, patch)
 // and returns the next version tag, ignoring any suffixes for simplicity.
 func GetNextTag(currentTag, bumpType string) (string, error) {
 	version, ok := parseTagVersion(currentTag)
@@ -140,7 +143,7 @@ func GetNextTag(currentTag, bumpType string) (string, error) {
 	return nextTag, nil
 }
 
-// parseInt safely converts a string to an int. Returns 0 on error.
+// ParseInt safely converts a string to an int. Returns 0 on error.
 func parseInt(s string) int {
 	i, err := strconv.Atoi(s)
 	if err != nil {
@@ -151,6 +154,7 @@ func parseInt(s string) int {
 	return i
 }
 
+// TagAndPush tags and pushes a new version of the repository at repoPath with the given tag.
 func TagAndPush(repoPath, tag string) error {
 	// Create the new tag
 	cmdTag := exec.Command("git", "tag", tag)

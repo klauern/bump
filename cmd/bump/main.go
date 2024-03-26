@@ -55,6 +55,7 @@ func main() {
 	}
 }
 
+// bumpVersion bumps the version of a project's .git directory to the next semantic version passed in as a string.
 func bumpVersion(bumpType string) error {
 	repoPath := "." // path to your git repository
 
