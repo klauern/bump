@@ -113,9 +113,9 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 	return "", nil // No semantic version tags found
 }
 
-// GetNextTag takes the current latest tag and the bump type (major, minor, patch)
-// and returns the next version tag, ignoring any suffixes for simplicity.
-func GetNextTag(currentTag, bumpType string) (string, error) {
+// GetNextTag takes the current latest tag, the bump type (major, minor, patch),
+// and an optional suffix, returning the next version tag.
+func GetNextTag(currentTag, bumpType, suffix string) (string, error) {
 	version, ok := ParseTagVersion(currentTag)
 	if !ok {
 		return "", fmt.Errorf("invalid current tag format: %s", currentTag)
@@ -126,19 +126,24 @@ func GetNextTag(currentTag, bumpType string) (string, error) {
 		version.Major++
 		version.Minor = 0
 		version.Patch = 0
-		version.Suffix = "" // Reset suffix for major version bump
 	case "minor":
 		version.Minor++
 		version.Patch = 0
-		version.Suffix = "" // Reset suffix for minor version bump
 	case "patch":
 		version.Patch++
-		version.Suffix = "" // Reset suffix for patch version bump
 	default:
 		return "", fmt.Errorf("unknown bump type: %s", bumpType)
 	}
 
-	// Construct the next version tag string without the suffix.
+	// If a non-empty suffix is passed, use it to update the version's suffix.
+	// This allows for flexible handling of prerelease or build metadata.
+	if suffix != "" {
+		version.Suffix = "-" + suffix // Ensures correct formatting with the leading dash.
+	} else {
+		version.Suffix = "" // Ensures no suffix is added if empty.
+	}
+
+	// Construct the next version tag string.
 	nextTag := fmt.Sprintf("v%d.%d.%d%s", version.Major, version.Minor, version.Patch, version.Suffix)
 	return nextTag, nil
 }

@@ -79,6 +79,7 @@ func TestGetNextTag(t *testing.T) {
 		name        string
 		currentTag  string
 		bumpType    string
+		suffix      string
 		expectedTag string
 		expectError bool
 	}{
@@ -86,6 +87,7 @@ func TestGetNextTag(t *testing.T) {
 			name:        "Bump minor version",
 			currentTag:  "v1.2.3",
 			bumpType:    "minor",
+			suffix:      "",
 			expectedTag: "v1.3.0",
 			expectError: false,
 		},
@@ -93,6 +95,7 @@ func TestGetNextTag(t *testing.T) {
 			name:        "Bump major version",
 			currentTag:  "v1.2.3",
 			bumpType:    "major",
+			suffix:      "",
 			expectedTag: "v2.0.0",
 			expectError: false,
 		},
@@ -100,6 +103,7 @@ func TestGetNextTag(t *testing.T) {
 			name:        "Bump patch version",
 			currentTag:  "v1.2.3",
 			bumpType:    "patch",
+			suffix:      "",
 			expectedTag: "v1.2.4",
 			expectError: false,
 		},
@@ -107,6 +111,7 @@ func TestGetNextTag(t *testing.T) {
 			name:        "Invalid bump type",
 			currentTag:  "v1.2.3",
 			bumpType:    "invalid",
+			suffix:      "",
 			expectedTag: "",
 			expectError: true,
 		},
@@ -114,6 +119,7 @@ func TestGetNextTag(t *testing.T) {
 			name:        "Invalid current tag - 1",
 			currentTag:  "",
 			bumpType:    "patch",
+			suffix:      "",
 			expectedTag: "",
 			expectError: true,
 		},
@@ -121,6 +127,7 @@ func TestGetNextTag(t *testing.T) {
 			name:        "Invalid current tag - 2",
 			currentTag:  "v",
 			bumpType:    "minor",
+			suffix:      "",
 			expectedTag: "",
 			expectError: true,
 		},
@@ -128,14 +135,39 @@ func TestGetNextTag(t *testing.T) {
 			name:        "suffixed version",
 			currentTag:  "v0.1.0-prerelease",
 			bumpType:    "minor",
+			suffix:      "",
 			expectedTag: "v0.2.0",
+			expectError: false,
+		},
+		{
+			name:        "patch with suffix",
+			currentTag:  "v0.1.0",
+			bumpType:    "patch",
+			suffix:      "prerelease",
+			expectedTag: "v0.1.1-prerelease",
+			expectError: false,
+		},
+		{
+			name:        "minor with suffix",
+			currentTag:  "v0.1.1",
+			bumpType:    "minor",
+			suffix:      "prerelease",
+			expectedTag: "v0.2.0-prerelease",
+			expectError: false,
+		},
+		{
+			name:        "major with suffix",
+			currentTag:  "v0.1.1",
+			bumpType:    "major",
+			suffix:      "rc1",
+			expectedTag: "v1.0.0-rc1",
 			expectError: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nextTag, err := GetNextTag(tt.currentTag, tt.bumpType)
+			nextTag, err := GetNextTag(tt.currentTag, tt.bumpType, tt.suffix)
 			if (err != nil) != tt.expectError {
 				t.Errorf("GetNextTag() error = %v, expectError %v", err, tt.expectError)
 				return

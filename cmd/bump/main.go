@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/klauern/bump"
@@ -15,37 +16,9 @@ func main() {
 		Name:  "version-bumper",
 		Usage: "Bump the version of your project",
 		Commands: []*cli.Command{
-			{
-				Name:  "patch",
-				Usage: "Bump the patch version",
-				Action: func(c *cli.Context) error {
-					return bumpVersion("patch")
-				},
-			},
-			{
-				Name:  "minor",
-				Usage: "Bump the minor version",
-				Action: func(c *cli.Context) error {
-					return bumpVersion("minor")
-				},
-			},
-			{
-				Name:  "major",
-				Usage: "Bump the major version",
-				Action: func(c *cli.Context) error {
-					return bumpVersion("major")
-				},
-			},
-			{
-				Name:  "suffix",
-				Usage: "Add a suffix to the version",
-				Action: func(c *cli.Context) error {
-					if c.Args().Len() < 1 {
-						return fmt.Errorf("you must provide a suffix")
-					}
-					return bumpVersion(c.Args().First())
-				},
-			},
+			createCommand("patch", "Bump the patch version"),
+			createCommand("minor", "Bump the minor version"),
+			createCommand("major", "Bump the major version"),
 		},
 	}
 
@@ -55,9 +28,46 @@ func main() {
 	}
 }
 
+func createCommand(name, usage string) *cli.Command {
+	return &cli.Command{
+		Name:  name,
+		Usage: usage,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "suffix",
+				Usage: "Add a suffix to the version",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			return bumpVersion(name, c.String("suffix"))
+		},
+	}
+}
+
+// findGitRoot walks up the directory tree from the given startPath until it finds a .git directory.
+// If no .git directory is found, it returns an error.
+func findGitRoot(startPath string) (string, error) {
+	currentPath := startPath
+	for {
+		if _, err := os.Stat(filepath.Join(currentPath, ".git")); err == nil {
+			return currentPath, nil
+		}
+
+		parentPath := filepath.Dir(currentPath)
+		if parentPath == currentPath {
+			return "", fmt.Errorf("no .git directory found")
+		}
+
+		currentPath = parentPath
+	}
+}
+
 // bumpVersion bumps the version of a project's .git directory to the next semantic version passed in as a string.
-func bumpVersion(bumpType string) error {
-	repoPath := "." // path to your git repository
+func bumpVersion(bumpType, suffix string) error {
+	repoPath, err := findGitRoot(".")
+	if err != nil {
+		return fmt.Errorf("failed to find git root: %v", err)
+	}
 
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
@@ -76,7 +86,7 @@ func bumpVersion(bumpType string) error {
 
 	var nextTag string
 	if latestTag != "" {
-		nextTag, err = bump.GetNextTag(latestTag, bumpType)
+		nextTag, err = bump.GetNextTag(latestTag, bumpType, suffix)
 		if err != nil {
 			return fmt.Errorf("failed to determine next tag: %v", err)
 		}
