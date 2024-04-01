@@ -16,6 +16,10 @@ tasks:
     desc: "Remove build artifacts."
     cmds:
       - rm bump
+  install:
+    desc: "Install bump into GOPATH"
+    cmds:
+      - go install ./cmd/bump
   test:
     desc: "Run tests."
     cmds:
