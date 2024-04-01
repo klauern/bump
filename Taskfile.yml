@@ -1,0 +1,22 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default:
+    desc: "Show tasks."
+    cmds:
+      - "task -a"
+    silent: true
+  build:
+    desc: "Build the project."
+    cmds:
+      - "go build ./cmd/bump"
+  clean:
+    desc: "Remove build artifacts."
+    cmds:
+      - rm bump
+  test:
+    desc: "Run tests."
+    cmds:
+      - "go test ./..."
