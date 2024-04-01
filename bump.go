@@ -50,8 +50,8 @@ type tagVersion struct {
 	Tag                 string
 }
 
-// parseTagVersion parses a semantic version string into a tagVersion struct.
-func parseTagVersion(tag string) (*tagVersion, bool) {
+// ParseTagVersion parses a semantic version string into a tagVersion struct.
+func ParseTagVersion(tag string) (*tagVersion, bool) {
 	matches := semanticVersionRegex.FindStringSubmatch(tag)
 	if matches == nil {
 		return nil, false
@@ -95,7 +95,7 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 
 	err := tagRefs.ForEach(func(ref *plumbing.Reference) error {
 		tag := ref.Name().Short()
-		if version, ok := parseTagVersion(tag); ok {
+		if version, ok := ParseTagVersion(tag); ok {
 			versions = append(versions, version)
 		}
 		return nil
@@ -116,7 +116,7 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 // GetNextTag takes the current latest tag and the bump type (major, minor, patch)
 // and returns the next version tag, ignoring any suffixes for simplicity.
 func GetNextTag(currentTag, bumpType string) (string, error) {
-	version, ok := parseTagVersion(currentTag)
+	version, ok := ParseTagVersion(currentTag)
 	if !ok {
 		return "", fmt.Errorf("invalid current tag format: %s", currentTag)
 	}
