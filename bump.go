@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/storer"
@@ -19,16 +20,19 @@ func NewGitInfo(path string) ([]string, error) {
 
 	r, err := git.PlainOpen(path)
 	if err != nil {
+		log.Error("Error opening git repository: ", "err", err)
 		return nil, err
 	}
 
 	tagRefs, err := r.Tags()
 	if err != nil {
+		log.Error("Error getting tags: ", "err", err)
 		return nil, err
 	}
 	err = tagRefs.ForEach(func(tagRef *plumbing.Reference) error {
 		if tagRef.Name().IsTag() {
 			if strings.HasPrefix("v", tagRef.Name().String()) {
+				log.Debug("adding tag", "tag", tagRef.Name().String())
 				versions = append(versions, tagRef.Name().String())
 			}
 		}
@@ -101,6 +105,7 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 		return nil
 	})
 	if err != nil {
+		log.Error("error getting latest tag", err)
 		return "", err
 	}
 
@@ -110,7 +115,8 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 		return versions[0].Tag, nil
 	}
 
-	return "", nil // No semantic version tags found
+	log.Debug("No semantic version tags found")
+	return "", nil
 }
 
 // GetNextTag takes the current latest tag, the bump type (major, minor, patch),
@@ -118,6 +124,7 @@ func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 func GetNextTag(currentTag, bumpType, suffix string) (string, error) {
 	version, ok := ParseTagVersion(currentTag)
 	if !ok {
+		log.Error("invalid current tag", "currentTag", currentTag)
 		return "", fmt.Errorf("invalid current tag format: %s", currentTag)
 	}
 
@@ -132,6 +139,7 @@ func GetNextTag(currentTag, bumpType, suffix string) (string, error) {
 	case "patch":
 		version.Patch++
 	default:
+		log.Error("unknown bump type", "bumpType", bumpType)
 		return "", fmt.Errorf("unknown bump type: %s", bumpType)
 	}
 
@@ -152,8 +160,6 @@ func GetNextTag(currentTag, bumpType, suffix string) (string, error) {
 func parseInt(s string) int {
 	i, err := strconv.Atoi(s)
 	if err != nil {
-		// Handle the error according to your requirements.
-		// For simplicity, we return 0 here, but you may want to log the error or handle it differently.
 		return 0
 	}
 	return i
@@ -164,12 +170,14 @@ func TagAndPush(repoPath, tag string) error {
 	// Create the new tag
 	cmdTag := exec.Command("git", "tag", tag)
 	if err := cmdTag.Run(); err != nil {
+		log.Error("failed to create tag", "err", err)
 		return fmt.Errorf("failed to create tag: %w", err)
 	}
 
 	// Push the new tag to the default remote
 	cmdPush := exec.Command("git", "push", "--tags")
 	if err := cmdPush.Run(); err != nil {
+		log.Error("failed to push tag", "err", err)
 		return fmt.Errorf("failed to push tag: %w", err)
 	}
 

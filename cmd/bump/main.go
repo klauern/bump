@@ -2,18 +2,24 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/klauern/bump"
 	"github.com/urfave/cli/v2"
 )
 
+func init() {
+	if os.Getenv("DEBUG") != "" {
+		log.SetLevel(log.DebugLevel)
+	}
+}
+
 func main() {
 	app := &cli.App{
-		Name:  "version-bumper",
+		Name:  "bump",
 		Usage: "Bump the version of your project",
 		Commands: []*cli.Command{
 			createCommand("patch", "Bump the patch version"),
@@ -47,14 +53,17 @@ func createCommand(name, usage string) *cli.Command {
 // findGitRoot walks up the directory tree from the given startPath until it finds a .git directory.
 // If no .git directory is found, it returns an error.
 func findGitRoot(startPath string) (string, error) {
+	log.Debug("Find Git Root", "startPath", startPath)
 	currentPath := startPath
 	for {
 		if _, err := os.Stat(filepath.Join(currentPath, ".git")); err == nil {
+			log.Debug(".git found", "path", currentPath)
 			return currentPath, nil
 		}
 
 		parentPath := filepath.Dir(currentPath)
 		if parentPath == currentPath {
+			log.Error("no .git directory found")
 			return "", fmt.Errorf("no .git directory found")
 		}
 
