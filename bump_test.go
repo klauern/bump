@@ -187,3 +187,65 @@ func TestParseInt(t *testing.T) {
 		t.Errorf("Expected ParseInt('abc') to be 0, got %d", result)
 	}
 }
+
+
+func TestOpenGitRepoInvalidPath(t *testing.T) {
+	// Test case to ensure openGitRepo returns an error for an invalid path
+	repo, err := openGitRepo("/invalid/path")
+	if err == nil {
+		t.Errorf("Expected error for invalid path, got nil")
+	}
+	if repo != nil {
+		t.Errorf("Expected repo to be nil for invalid path")
+	}
+}
+
+
+func TestCreateTag(t *testing.T) {
+	// Test case to ensure createTag returns an error for an invalid command
+	err := createTag("")
+	if err == nil {
+		t.Errorf("Expected error for invalid tag command, got nil")
+	}
+}
+
+
+func TestCompareVersionsEqual(t *testing.T) {
+	// This test ensures compareVersions returns false for equal versions
+	version1 := &tagVersion{Major: 1, Minor: 0, Patch: 0}
+	version2 := &tagVersion{Major: 1, Minor: 0, Patch: 0}
+	if compareVersions(version1, version2) {
+		t.Errorf("Expected compareVersions to return false for equal versions")
+	}
+}
+
+
+func TestNewGitInfoInvalidPath(t *testing.T) {
+	// This test ensures NewGitInfo returns an error for an invalid path
+	_, err := NewGitInfo("/invalid/path")
+	if err == nil {
+		t.Errorf("Expected error for invalid path, got nil")
+	}
+}
+
+
+func TestTagAndPushInvalidRepoPath(t *testing.T) {
+	// This test ensures TagAndPush returns an error for an invalid repository path
+	err := TagAndPush("/invalid/path", "v1.2.3")
+	if err == nil {
+		t.Errorf("Expected error for invalid repository path, got nil")
+	}
+}
+
+
+func TestCompareVersionsHigherPatch(t *testing.T) {
+	// This test ensures compareVersions correctly compares versions with different patch numbers
+	version1 := &tagVersion{Major: 1, Minor: 0, Patch: 1}
+	version2 := &tagVersion{Major: 1, Minor: 0, Patch: 2}
+	if !compareVersions(version2, version1) {
+		t.Errorf("Expected version2 to be greater than version1 by patch")
+	}
+	if compareVersions(version1, version2) {
+		t.Errorf("Expected version1 to be less than version2 by patch")
+	}
+}
