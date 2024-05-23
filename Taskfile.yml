@@ -23,4 +23,5 @@ tasks:
   test:
     desc: "Run tests."
     cmds:
-      - "go test ./..."
+      - go test -cover -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out
