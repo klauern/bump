@@ -1,6 +1,6 @@
 # Bump (`bump`)
 
-Bump is a handy CLI tool designed to help you manage the versioning of your project using semantic versioning. It allows you to automatically bump the version of your project and tag the repository accordingly. This tool operates directly within your project's Git repository.
+Bump is a CLI tool designed to help you manage the versioning of your project using semantic versioning. It allows you to bump the version of your project and tag the repository accordingly. This tool operates directly within your project's Git repository.
 
 ## Features
 
@@ -40,7 +40,7 @@ After you have successfully built the `version-bumper`, you can use it by runnin
 
 ## Contributing
 
-We welcome contributions to the `version-bumper`! Whether it's improving documentation, adding new features, or reporting bugs, your contributions are greatly appreciated.
+We welcome contributions to `bump`, whether it's improving documentation, adding new features, or reporting bugs, your contributions are greatly appreciated.
 
 ## License
 
@@ -48,4 +48,4 @@ This project is licensed under the [MIT License](LICENSE). Feel free to clone, m
 
 ## Disclaimer
 
-The `version-bumper` is provided "as is", without warranty of any kind. Use at your own risk.
+The `bump` is provided "as is", without warranty of any kind. Use at your own risk.
