@@ -10,3 +10,6 @@ gen
 *.test
 *.out
 go.work
+.aider*
+.env*
+.DS_Store
