@@ -12,6 +12,10 @@ tasks:
     desc: "Build the project."
     cmds:
       - "go build ./cmd/bump"
+  lint:
+    desc: "Lint the project."
+    cmds:
+      - golangci-lint run
   clean:
     desc: "Remove build artifacts."
     cmds:

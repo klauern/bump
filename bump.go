@@ -61,13 +61,17 @@ func getTags(r *git.Repository) (storer.ReferenceIter, error) {
 // getVersions returns the semantic versions of the given git tags.
 func getVersions(tagRefs storer.ReferenceIter) []string {
 	var versions []string
-	tagRefs.ForEach(func(tagRef *plumbing.Reference) error {
+	err := tagRefs.ForEach(func(tagRef *plumbing.Reference) error {
 		if tagRef.Name().IsTag() && strings.HasPrefix("v", tagRef.Name().String()) {
 			log.Debug("adding tag", "tag", tagRef.Name().String())
 			versions = append(versions, tagRef.Name().String())
 		}
 		return nil
 	})
+	if err != nil {
+		log.Error("Error iterating tags", "err", err)
+		return nil
+	}
 	return versions
 }
 
