@@ -4,10 +4,13 @@ package bump
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"gopkg.in/ini.v1"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
@@ -204,17 +207,14 @@ func parseInt(s string) int {
 	return i
 }
 
-// TagAndPush creates a new git tag with the given tag and pushes it to the remote repository.
-func TagAndPush(repoPath, tag string) error {
-	if err := createTag(tag); err != nil {
-		return err
-	}
+// CreateTag creates a new git tag with the given tag.
+func CreateTag(tag string) error {
+	return createTag(tag)
+}
 
-	if err := pushTag(); err != nil {
-		return err
-	}
-
-	return nil
+// PushTag pushes the latest git tag to the remote repository.
+func PushTag() error {
+	return pushTag()
 }
 
 // createTag creates a new git tag with the given tag.
@@ -235,4 +235,31 @@ func pushTag() error {
 		return fmt.Errorf("failed to push tag: %w", err)
 	}
 	return nil
+}
+
+// GetDefaultPushPreference reads the [bump] defaultPush value from .git/config in the given repo path.
+func GetDefaultPushPreference(repoPath string) (bool, error) {
+	configPath := filepath.Join(repoPath, ".git", "config")
+	cfg, err := ini.Load(configPath)
+	if err != nil {
+		return false, err
+	}
+	section := cfg.Section("bump")
+	val := section.Key("defaultPush").String()
+	if val == "true" {
+		return true, nil
+	}
+	return false, nil
+}
+
+// SetDefaultPushPreference writes the [bump] defaultPush value to .git/config in the given repo path.
+func SetDefaultPushPreference(repoPath string, value bool) error {
+	configPath := filepath.Join(repoPath, ".git", "config")
+	cfg, err := ini.Load(configPath)
+	if err != nil {
+		return err
+	}
+	section := cfg.Section("bump")
+	section.Key("defaultPush").SetValue(fmt.Sprintf("%v", value))
+	return cfg.SaveTo(configPath)
 }

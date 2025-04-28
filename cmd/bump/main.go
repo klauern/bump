@@ -31,6 +31,43 @@ func main() {
 			createCommand("patch", "p", "Bump the patch version"),
 			createCommand("minor", "m", "Bump the minor version"),
 			createCommand("major", "M", "Bump the major version"),
+			{
+				Name:  "push",
+				Usage: "Push tags to remote",
+				Action: func(c *cli.Context) error {
+					if err := bump.PushTag(); err != nil {
+						return fmt.Errorf("failed to push tags: %v", err)
+					}
+					fmt.Println("Successfully pushed tags to remote.")
+					return nil
+				},
+			},
+			{
+				Name:  "config",
+				Usage: "Configure bump settings for this repo",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "default-push",
+						Usage: "Set default to push tags after bumping",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					repoPath, err := findGitRoot(".")
+					if err != nil {
+						return fmt.Errorf("failed to find git root: %v", err)
+					}
+					if c.IsSet("default-push") {
+						val := c.Bool("default-push")
+						err := bump.SetDefaultPushPreference(repoPath, val)
+						if err != nil {
+							return fmt.Errorf("failed to set default push: %v", err)
+						}
+						fmt.Printf("Set default push to %v for this repo.\n", val)
+						return nil
+					}
+					return cli.ShowSubcommandHelp(c)
+				},
+			},
 		},
 	}
 
@@ -54,9 +91,31 @@ func createCommand(name, alias, usage string) *cli.Command {
 				Name:  "update-file",
 				Usage: "Update a file with the next dev version",
 			},
+			&cli.BoolFlag{
+				Name:  "push",
+				Usage: "Push the tag to remote after creating it",
+			},
 		},
 		Action: func(c *cli.Context) error {
-			return bumpVersion(name, c.String("suffix"), c.String("update-file"))
+			pushFlag := c.Bool("push")
+			pushSet := c.IsSet("push")
+			repoPath, err := findGitRoot(".")
+			if err != nil {
+				return fmt.Errorf("failed to find git root: %v", err)
+			}
+			var doPush bool
+			if pushSet {
+				doPush = pushFlag
+			} else {
+				// Not set on CLI, check repo default
+				val, err := bump.GetDefaultPushPreference(repoPath)
+				if err == nil {
+					doPush = val
+				} else {
+					doPush = false // fallback default
+				}
+			}
+			return bumpVersion(name, c.String("suffix"), c.String("update-file"), doPush)
 		},
 	}
 }
@@ -83,7 +142,7 @@ func findGitRoot(startPath string) (string, error) {
 }
 
 // bumpVersion bumps the version of a project's .git directory to the next semantic version passed in as a string.
-func bumpVersion(bumpType, suffix, updateFile string) error {
+func bumpVersion(bumpType, suffix, updateFile string, doPush bool) error {
 	repoPath, err := findGitRoot(".")
 	if err != nil {
 		return fmt.Errorf("failed to find git root: %v", err)
@@ -115,12 +174,20 @@ func bumpVersion(bumpType, suffix, updateFile string) error {
 		nextTag = "v0.1.0"
 	}
 
-	err = bump.TagAndPush(repoPath, nextTag)
+	err = bump.CreateTag(nextTag)
 	if err != nil {
-		return fmt.Errorf("failed to tag and push: %v", err)
+		return fmt.Errorf("failed to create tag: %v", err)
 	}
 
-	fmt.Printf("Successfully created and pushed tag %s\n", nextTag)
+	if doPush {
+		err = bump.PushTag()
+		if err != nil {
+			return fmt.Errorf("failed to push tag: %v", err)
+		}
+		fmt.Printf("Successfully created and pushed tag %s\n", nextTag)
+	} else {
+		fmt.Printf("Successfully created tag %s. To push, run: git push --tags\n", nextTag)
+	}
 
 	if updateFile != "" {
 		err = updateVersionFile(updateFile, nextTag)
@@ -171,7 +238,7 @@ func updateVersionFile(filePath, nextTag string) error {
 	})
 
 	if !updated {
-		return fmt.Errorf("Version constant not found in file")
+		return fmt.Errorf("version constant not found in file")
 	}
 
 	// Write the updated AST back to the file
