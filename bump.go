@@ -18,6 +18,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/storer"
 )
 
+// execCommand is a variable to hold the exec.Command function for easier testing and mocking.
+var execCommand = exec.Command
+
 // semanticVersionRegex is a regular expression for semantic versioning.
 var semanticVersionRegex = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`)
 
@@ -219,7 +222,7 @@ func PushTag() error {
 
 // createTag creates a new git tag with the given tag.
 func createTag(tag string) error {
-	cmdTag := exec.Command("git", "tag", tag)
+	cmdTag := execCommand("git", "tag", tag)
 	if err := cmdTag.Run(); err != nil {
 		log.Error("failed to create tag", "err", err)
 		return fmt.Errorf("failed to create tag: %w", err)
@@ -229,7 +232,7 @@ func createTag(tag string) error {
 
 // pushTag pushes the latest git tag to the remote repository.
 func pushTag() error {
-	cmdPush := exec.Command("git", "push", "--tags")
+	cmdPush := execCommand("git", "push", "--tags")
 	if err := cmdPush.Run(); err != nil {
 		log.Error("failed to push tag", "err", err)
 		return fmt.Errorf("failed to push tag: %w", err)
