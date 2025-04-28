@@ -1,6 +1,7 @@
 package bump
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -233,7 +234,15 @@ func TestCreateTagInvalid(t *testing.T) {
 }
 
 func TestPushTagInvalid(t *testing.T) {
-	// This test ensures PushTag returns an error if push fails (simulate by running outside a git repo)
+	// Override execCommand to simulate a failure
+	origExecCommand := execCommand
+	defer func() { execCommand = origExecCommand }()
+
+	execCommand = func(name string, arg ...string) *exec.Cmd {
+		// Return a command that always fails
+		return exec.Command("false")
+	}
+
 	err := PushTag()
 	if err == nil {
 		t.Errorf("Expected error for push outside a git repo, got nil")
