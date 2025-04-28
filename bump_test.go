@@ -188,7 +188,6 @@ func TestParseInt(t *testing.T) {
 	}
 }
 
-
 func TestOpenGitRepoInvalidPath(t *testing.T) {
 	// Test case to ensure openGitRepo returns an error for an invalid path
 	repo, err := openGitRepo("/invalid/path")
@@ -200,7 +199,6 @@ func TestOpenGitRepoInvalidPath(t *testing.T) {
 	}
 }
 
-
 func TestCreateTag(t *testing.T) {
 	// Test case to ensure createTag returns an error for an invalid command
 	err := createTag("")
@@ -208,7 +206,6 @@ func TestCreateTag(t *testing.T) {
 		t.Errorf("Expected error for invalid tag command, got nil")
 	}
 }
-
 
 func TestCompareVersionsEqual(t *testing.T) {
 	// This test ensures compareVersions returns false for equal versions
@@ -219,7 +216,6 @@ func TestCompareVersionsEqual(t *testing.T) {
 	}
 }
 
-
 func TestNewGitInfoInvalidPath(t *testing.T) {
 	// This test ensures NewGitInfo returns an error for an invalid path
 	_, err := NewGitInfo("/invalid/path")
@@ -228,15 +224,21 @@ func TestNewGitInfoInvalidPath(t *testing.T) {
 	}
 }
 
-
-func TestTagAndPushInvalidRepoPath(t *testing.T) {
-	// This test ensures TagAndPush returns an error for an invalid repository path
-	err := TagAndPush("/invalid/path", "v1.2.3")
+func TestCreateTagInvalid(t *testing.T) {
+	// This test ensures CreateTag returns an error for an invalid tag
+	err := CreateTag("")
 	if err == nil {
-		t.Errorf("Expected error for invalid repository path, got nil")
+		t.Errorf("Expected error for invalid tag, got nil")
 	}
 }
 
+func TestPushTagInvalid(t *testing.T) {
+	// This test ensures PushTag returns an error if push fails (simulate by running outside a git repo)
+	err := PushTag()
+	if err == nil {
+		t.Errorf("Expected error for push outside a git repo, got nil")
+	}
+}
 
 func TestCompareVersionsHigherPatch(t *testing.T) {
 	// This test ensures compareVersions correctly compares versions with different patch numbers
