@@ -95,6 +95,10 @@ func createCommand(name, alias, usage string) *cli.Command {
 				Name:  "push",
 				Usage: "Push the tag to remote after creating it",
 			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Show what version would be created without making changes",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			pushFlag := c.Bool("push")
@@ -115,7 +119,7 @@ func createCommand(name, alias, usage string) *cli.Command {
 					doPush = false // fallback default
 				}
 			}
-			return bumpVersion(name, c.String("suffix"), c.String("update-file"), doPush)
+			return bumpVersion(name, c.String("suffix"), c.String("update-file"), doPush, c.Bool("dry-run"))
 		},
 	}
 }
@@ -142,7 +146,7 @@ func findGitRoot(startPath string) (string, error) {
 }
 
 // bumpVersion bumps the version of a project's .git directory to the next semantic version passed in as a string.
-func bumpVersion(bumpType, suffix, updateFile string, doPush bool) error {
+func bumpVersion(bumpType, suffix, updateFile string, doPush, dryRun bool) error {
 	repoPath, err := findGitRoot(".")
 	if err != nil {
 		return fmt.Errorf("failed to find git root: %v", err)
@@ -170,8 +174,23 @@ func bumpVersion(bumpType, suffix, updateFile string, doPush bool) error {
 			return fmt.Errorf("failed to determine next tag: %v", err)
 		}
 	} else {
-		fmt.Println("No tags found, starting at v0.1.0")
+		if dryRun {
+			fmt.Println("No tags found, would start at v0.1.0")
+		} else {
+			fmt.Println("No tags found, starting at v0.1.0")
+		}
 		nextTag = "v0.1.0"
+	}
+
+	if dryRun {
+		fmt.Printf("Would create tag: %s\n", nextTag)
+		if doPush {
+			fmt.Println("Would push tag to remote")
+		}
+		if updateFile != "" {
+			fmt.Printf("Would update file: %s\n", updateFile)
+		}
+		return nil
 	}
 
 	err = bump.CreateTag(nextTag)
