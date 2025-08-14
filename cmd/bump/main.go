@@ -7,12 +7,13 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/klauern/bump"
 	"github.com/urfave/cli/v2"
 )
@@ -112,11 +113,11 @@ func createCommand(name, alias, usage string) *cli.Command {
 				doPush = pushFlag
 			} else {
 				// Not set on CLI, check repo default
-				val, err := bump.GetDefaultPushPreference(repoPath)
-				if err == nil {
-					doPush = val
+				val, isSet, err := bump.GetDefaultPushPreference(repoPath)
+				if err == nil && isSet {
+					doPush = val // Use explicitly configured value
 				} else {
-					doPush = false // fallback default
+					doPush = false // Use default (false) when not configured or error
 				}
 			}
 			return bumpVersion(name, c.String("suffix"), c.String("update-file"), doPush, c.Bool("dry-run"))
@@ -161,6 +162,7 @@ func bumpVersion(bumpType, suffix, updateFile string, doPush, dryRun bool) error
 	if err != nil {
 		return fmt.Errorf("failed to fetch tags: %v", err)
 	}
+	defer tagRefs.Close()
 
 	latestTag, err := bump.GetLatestTag(tagRefs)
 	if err != nil {
@@ -218,6 +220,20 @@ func bumpVersion(bumpType, suffix, updateFile string, doPush, dryRun bool) error
 }
 
 func updateVersionFile(filePath, nextTag string) error {
+	// Validate and sanitize file path to prevent path traversal
+	repoPath, err := findGitRoot(".")
+	if err != nil {
+		return fmt.Errorf("failed to find git root: %w", err)
+	}
+
+	// Comprehensive path validation and sanitization
+	if err := validateFilePath(filePath, repoPath); err != nil {
+		return fmt.Errorf("invalid file path: %w", err)
+	}
+
+	// Use cleaned path for all subsequent operations
+	cleanPath := filepath.Clean(filePath)
+
 	// Parse the next tag
 	nextVersion, ok := bump.ParseTagVersion(nextTag)
 	if !ok {
@@ -229,7 +245,7 @@ func updateVersionFile(filePath, nextTag string) error {
 
 	// Parse the file
 	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	node, err := parser.ParseFile(fset, cleanPath, nil, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("failed to parse file: %v", err)
 	}
@@ -267,22 +283,112 @@ func updateVersionFile(filePath, nextTag string) error {
 		return fmt.Errorf("failed to format updated AST: %v", err)
 	}
 
-	err = os.WriteFile(filePath, []byte(buf.String()), 0o644)
+	err = os.WriteFile(cleanPath, []byte(buf.String()), 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %v", err)
 	}
 
-	// Commit the change
-	cmd := exec.Command("git", "add", filePath)
-	err = cmd.Run()
+	// Use go-git library instead of exec.Command to prevent command injection
+	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return fmt.Errorf("failed to stage file: %v", err)
+		return fmt.Errorf("failed to open git repository: %w", err)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", fmt.Sprintf("Bump version to %s", devVersion))
-	err = cmd.Run()
+	// Get the working tree
+	worktree, err := repo.Worktree()
 	if err != nil {
-		return fmt.Errorf("failed to commit file: %v", err)
+		return fmt.Errorf("failed to get working tree: %w", err)
+	}
+
+	// Stage the file
+	relPath, err := filepath.Rel(repoPath, cleanPath)
+	if err != nil {
+		return fmt.Errorf("failed to determine relative path: %w", err)
+	}
+
+	_, err = worktree.Add(relPath)
+	if err != nil {
+		return fmt.Errorf("failed to stage file: %w", err)
+	}
+
+	// Commit the change
+	commitMsg := fmt.Sprintf("Bump version to %s", devVersion)
+	_, err = worktree.Commit(commitMsg, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Bump CLI",
+			Email: "bump@localhost",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to commit file: %w", err)
+	}
+
+	return nil
+}
+
+// validateFilePath performs comprehensive validation to prevent path traversal attacks
+func validateFilePath(filePath, repoPath string) error {
+	// Check for empty or whitespace-only paths
+	if strings.TrimSpace(filePath) == "" {
+		return fmt.Errorf("file path cannot be empty")
+	}
+
+	// Check for suspicious patterns that indicate path traversal attempts
+	suspiciousPatterns := []string{
+		"..",           // Directory traversal
+		"\x00",         // Null byte injection
+		"\r",           // Carriage return
+		"\n",           // Newline injection
+	}
+
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(filePath, pattern) {
+			return fmt.Errorf("path contains invalid characters")
+		}
+	}
+
+	// Clean the path and resolve to absolute path
+	cleanPath := filepath.Clean(filePath)
+	
+	// Prevent paths that would resolve outside the working directory
+	if filepath.IsAbs(cleanPath) {
+		return fmt.Errorf("absolute paths are not allowed")
+	}
+
+	// Resolve to absolute path for boundary checking
+	absPath, err := filepath.Abs(filepath.Join(repoPath, cleanPath))
+	if err != nil {
+		return fmt.Errorf("unable to resolve path")
+	}
+
+	// Get canonical repository path
+	repoAbsPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		return fmt.Errorf("unable to resolve repository path")
+	}
+
+	// Resolve symlinks to prevent symlink attacks
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		// If symlink resolution fails, use the original path but ensure it exists within bounds
+		resolvedPath = absPath
+	}
+
+	resolvedRepoPath, err := filepath.EvalSymlinks(repoAbsPath)
+	if err != nil {
+		resolvedRepoPath = repoAbsPath
+	}
+
+	// Ensure the resolved path is within repository boundaries
+	if !strings.HasPrefix(resolvedPath, resolvedRepoPath+string(filepath.Separator)) &&
+		resolvedPath != resolvedRepoPath {
+		return fmt.Errorf("file path must be within repository")
+	}
+
+	// Additional check: ensure the path doesn't contain relative components after cleaning
+	if strings.Contains(cleanPath, "..") {
+		return fmt.Errorf("path contains invalid components")
 	}
 
 	return nil
