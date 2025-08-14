@@ -13,3 +13,8 @@ go.work
 .aider*
 .env*
 .DS_Store
+
+# Build artifacts
+bump
+dist/
+coverage.out
