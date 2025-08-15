@@ -29,8 +29,3 @@ tasks:
     cmds:
       - go test -cover -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out
-  test:
-    desc: "Run tests."
-    cmds:
-      - go test -cover -coverprofile=coverage.out ./...
-      - go tool cover -html=coverage.out

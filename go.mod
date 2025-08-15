@@ -1,6 +1,6 @@
 module github.com/klauern/bump
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/charmbracelet/log v0.4.2

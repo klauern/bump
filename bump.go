@@ -3,12 +3,15 @@ package bump
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"gopkg.in/ini.v1"
 
@@ -23,6 +26,111 @@ var execCommand = exec.Command
 
 // semanticVersionRegex is a regular expression for semantic versioning.
 var semanticVersionRegex = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`)
+
+// gitLocks stores file-based locks per repository to prevent concurrent git operations
+var gitLocks = make(map[string]*sync.Mutex)
+var gitLocksMutex sync.RWMutex
+
+// GitLock represents a file-based lock for git operations
+type GitLock struct {
+	lockFile string
+	acquired bool
+	mutex    *sync.Mutex
+}
+
+// acquireGitLock acquires a file-based lock for git operations on the specified repository.
+// This prevents concurrent git operations that could corrupt the repository state.
+func acquireGitLock(repoPath string) (*GitLock, error) {
+	// Validate repository path first
+	if err := validateRepositoryPath(repoPath); err != nil {
+		return nil, fmt.Errorf("invalid repository for git lock: %w", err)
+	}
+
+	absRepoPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve repository path: %w", err)
+	}
+
+	// Get or create a mutex for this repository
+	gitLocksMutex.Lock()
+	if gitLocks[absRepoPath] == nil {
+		gitLocks[absRepoPath] = &sync.Mutex{}
+	}
+	repoMutex := gitLocks[absRepoPath]
+	gitLocksMutex.Unlock()
+
+	// Acquire the in-process mutex first
+	repoMutex.Lock()
+
+	lockFile := filepath.Join(absRepoPath, ".git", "bump.lock")
+	
+	// Try to acquire file-based lock with timeout
+	const maxAttempts = 30
+	const lockTimeout = 100 * time.Millisecond
+	
+	var lockFileHandle *os.File
+	for i := 0; i < maxAttempts; i++ {
+		lockFileHandle, err = os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err == nil {
+			break
+		}
+		
+		if !os.IsExist(err) {
+			repoMutex.Unlock()
+			return nil, fmt.Errorf("failed to create lock file: %w", err)
+		}
+		
+		// Check if existing lock file is stale (older than 5 minutes)
+		if stat, statErr := os.Stat(lockFile); statErr == nil {
+			if time.Since(stat.ModTime()) > 5*time.Minute {
+				log.Warn("Removing stale lock file", "lockFile", lockFile, "age", time.Since(stat.ModTime()))
+				if err := os.Remove(lockFile); err != nil {
+					log.Error("failed to remove stale lock file", "lockFile", lockFile, "err", err)
+				}
+				continue
+			}
+		}
+		
+		time.Sleep(lockTimeout)
+	}
+	
+	if lockFileHandle == nil {
+		repoMutex.Unlock()
+		return nil, fmt.Errorf("failed to acquire git lock after %d attempts: repository may be busy", maxAttempts)
+	}
+
+	// Write process info to lock file
+	if _, err := fmt.Fprintf(lockFileHandle, "pid: %d\ntime: %s\n", os.Getpid(), time.Now().Format(time.RFC3339)); err != nil {
+		log.Error("failed to write to lock file", "lockFile", lockFile, "err", err)
+	}
+	if err := lockFileHandle.Close(); err != nil {
+		log.Error("failed to close lock file", "lockFile", lockFile, "err", err)
+	}
+
+	return &GitLock{
+		lockFile: lockFile,
+		acquired: true,
+		mutex:    repoMutex,
+	}, nil
+}
+
+// Release releases the git lock, removing the lock file and releasing the mutex.
+func (lock *GitLock) Release() error {
+	if !lock.acquired {
+		return nil
+	}
+
+	// Remove lock file
+	if err := os.Remove(lock.lockFile); err != nil && !os.IsNotExist(err) {
+		log.Error("failed to remove lock file", "lockFile", lock.lockFile, "err", err)
+	}
+
+	// Release in-process mutex
+	lock.mutex.Unlock()
+	lock.acquired = false
+
+	return nil
+}
 
 // tagVersion represents a semantic version of a git tag.
 type tagVersion struct {
@@ -42,6 +150,7 @@ func NewGitInfo(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer tagRefs.Close()
 
 	return getVersions(tagRefs), nil
 }
@@ -68,7 +177,7 @@ func getTags(r *git.Repository) (storer.ReferenceIter, error) {
 func getVersions(tagRefs storer.ReferenceIter) []string {
 	var versions []string
 	err := tagRefs.ForEach(func(tagRef *plumbing.Reference) error {
-		if tagRef.Name().IsTag() && strings.HasPrefix("v", tagRef.Name().String()) {
+		if tagRef.Name().IsTag() && strings.HasPrefix(tagRef.Name().Short(), "v") {
 			log.Debug("adding tag", "tag", tagRef.Name().String())
 			versions = append(versions, tagRef.Name().String())
 		}
@@ -211,12 +320,54 @@ func parseInt(s string) int {
 }
 
 // CreateTag creates a new git tag with the given tag.
+// Uses concurrency protection to prevent concurrent git operations.
 func CreateTag(tag string) error {
-	return createTag(tag)
+	repoPath, err := findGitRepoRoot(".")
+	if err != nil {
+		return fmt.Errorf("failed to find git repository: %w", err)
+	}
+	
+	return createTagWithLock(repoPath, tag)
 }
 
 // PushTag pushes the latest git tag to the remote repository.
+// Uses concurrency protection to prevent concurrent git operations.
 func PushTag() error {
+	repoPath, err := findGitRepoRoot(".")
+	if err != nil {
+		return fmt.Errorf("failed to find git repository: %w", err)
+	}
+	
+	return pushTagWithLock(repoPath)
+}
+
+// createTagWithLock creates a new git tag with the given tag using git operation locking.
+func createTagWithLock(repoPath, tag string) error {
+	lock, err := acquireGitLock(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to acquire git lock: %w", err)
+	}
+	defer func() {
+		if releaseErr := lock.Release(); releaseErr != nil {
+			log.Error("failed to release git lock", "err", releaseErr)
+		}
+	}()
+
+	return createTag(tag)
+}
+
+// pushTagWithLock pushes tags to remote using git operation locking.
+func pushTagWithLock(repoPath string) error {
+	lock, err := acquireGitLock(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to acquire git lock: %w", err)
+	}
+	defer func() {
+		if releaseErr := lock.Release(); releaseErr != nil {
+			log.Error("failed to release git lock", "err", releaseErr)
+		}
+	}()
+
 	return pushTag()
 }
 
@@ -240,29 +391,136 @@ func pushTag() error {
 	return nil
 }
 
+// findGitRepoRoot finds the root directory of the git repository.
+func findGitRepoRoot(startPath string) (string, error) {
+	currentPath := startPath
+	for {
+		if _, err := os.Stat(filepath.Join(currentPath, ".git")); err == nil {
+			return currentPath, nil
+		}
+
+		parentPath := filepath.Dir(currentPath)
+		if parentPath == currentPath {
+			return "", fmt.Errorf("not inside a git repository")
+		}
+		currentPath = parentPath
+	}
+}
+
 // GetDefaultPushPreference reads the [bump] defaultPush value from .git/config in the given repo path.
-func GetDefaultPushPreference(repoPath string) (bool, error) {
+// Returns (value, isSet, error) where isSet indicates if the preference was explicitly configured.
+func GetDefaultPushPreference(repoPath string) (bool, bool, error) {
+	// Validate repository path
+	if err := validateRepositoryPath(repoPath); err != nil {
+		return false, false, fmt.Errorf("invalid repository path: %w", err)
+	}
+
 	configPath := filepath.Join(repoPath, ".git", "config")
+	
+	// Check if config file exists and is readable
+	if _, err := os.Stat(configPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, false, fmt.Errorf("git config file not found: %s", configPath)
+		}
+		return false, false, fmt.Errorf("cannot access git config file: %w", err)
+	}
+
 	cfg, err := ini.Load(configPath)
 	if err != nil {
-		return false, err
+		return false, false, fmt.Errorf("failed to load git config: %w", err)
 	}
+
 	section := cfg.Section("bump")
-	val := section.Key("defaultPush").String()
-	if val == "true" {
-		return true, nil
+	if !section.HasKey("defaultPush") {
+		// Return false, false (not set) when preference is not configured
+		return false, false, nil
 	}
-	return false, nil
+
+	val := section.Key("defaultPush").String()
+	switch val {
+	case "true":
+		return true, true, nil  // value=true, isSet=true
+	case "false":
+		return false, true, nil // value=false, isSet=true (explicitly set to false)
+	default:
+		return false, false, fmt.Errorf("invalid defaultPush value: %s (must be 'true' or 'false')", val)
+	}
 }
 
 // SetDefaultPushPreference writes the [bump] defaultPush value to .git/config in the given repo path.
+// Uses atomic writes to prevent corruption.
 func SetDefaultPushPreference(repoPath string, value bool) error {
+	// Validate repository path  
+	if err := validateRepositoryPath(repoPath); err != nil {
+		return fmt.Errorf("invalid repository path: %w", err)
+	}
+
 	configPath := filepath.Join(repoPath, ".git", "config")
+	
+	// Check if config file exists and is writable
+	if _, err := os.Stat(configPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("git config file not found: %s", configPath)
+		}
+		return fmt.Errorf("cannot access git config file: %w", err)
+	}
+
+	// Create backup file path for atomic operation
+	backupPath := configPath + ".bump.tmp"
+	
+	// Load current config
 	cfg, err := ini.Load(configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load git config: %w", err)
 	}
+
+	// Update the configuration
 	section := cfg.Section("bump")
 	section.Key("defaultPush").SetValue(fmt.Sprintf("%v", value))
-	return cfg.SaveTo(configPath)
+
+	// Write to temporary file first (atomic operation)
+	if err := cfg.SaveTo(backupPath); err != nil {
+		return fmt.Errorf("failed to write temporary config: %w", err)
+	}
+
+	// Atomic rename to replace original file
+	if err := os.Rename(backupPath, configPath); err != nil {
+		// Clean up temporary file on failure
+		if rmErr := os.Remove(backupPath); rmErr != nil {
+			log.Error("failed to clean up temporary config file", "backupPath", backupPath, "err", rmErr)
+		}
+		return fmt.Errorf("failed to update git config atomically: %w", err)
+	}
+
+	return nil
+}
+
+// validateRepositoryPath validates that the given path is a valid Git repository.
+func validateRepositoryPath(repoPath string) error {
+	if repoPath == "" {
+		return fmt.Errorf("repository path cannot be empty")
+	}
+
+	// Clean and validate the path
+	cleanPath := filepath.Clean(repoPath)
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Check if it's a valid git repository
+	gitDir := filepath.Join(absPath, ".git")
+	stat, err := os.Stat(gitDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("not a git repository: %s", absPath)
+		}
+		return fmt.Errorf("cannot access .git directory: %w", err)
+	}
+
+	if !stat.IsDir() {
+		return fmt.Errorf(".git is not a directory: %s", gitDir)
+	}
+
+	return nil
 }
