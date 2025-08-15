@@ -84,7 +84,9 @@ func acquireGitLock(repoPath string) (*GitLock, error) {
 		if stat, statErr := os.Stat(lockFile); statErr == nil {
 			if time.Since(stat.ModTime()) > 5*time.Minute {
 				log.Warn("Removing stale lock file", "lockFile", lockFile, "age", time.Since(stat.ModTime()))
-				os.Remove(lockFile)
+				if err := os.Remove(lockFile); err != nil {
+					log.Error("failed to remove stale lock file", "lockFile", lockFile, "err", err)
+				}
 				continue
 			}
 		}
@@ -98,8 +100,12 @@ func acquireGitLock(repoPath string) (*GitLock, error) {
 	}
 
 	// Write process info to lock file
-	fmt.Fprintf(lockFileHandle, "pid: %d\ntime: %s\n", os.Getpid(), time.Now().Format(time.RFC3339))
-	lockFileHandle.Close()
+	if _, err := fmt.Fprintf(lockFileHandle, "pid: %d\ntime: %s\n", os.Getpid(), time.Now().Format(time.RFC3339)); err != nil {
+		log.Error("failed to write to lock file", "lockFile", lockFile, "err", err)
+	}
+	if err := lockFileHandle.Close(); err != nil {
+		log.Error("failed to close lock file", "lockFile", lockFile, "err", err)
+	}
 
 	return &GitLock{
 		lockFile: lockFile,
@@ -480,7 +486,9 @@ func SetDefaultPushPreference(repoPath string, value bool) error {
 	// Atomic rename to replace original file
 	if err := os.Rename(backupPath, configPath); err != nil {
 		// Clean up temporary file on failure
-		os.Remove(backupPath)
+		if rmErr := os.Remove(backupPath); rmErr != nil {
+			log.Error("failed to clean up temporary config file", "backupPath", backupPath, "err", rmErr)
+		}
 		return fmt.Errorf("failed to update git config atomically: %w", err)
 	}
 
