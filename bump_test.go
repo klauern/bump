@@ -2,12 +2,29 @@ package bump
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	// "github.com/klauern/bump"
 )
+
+// newTempRepo creates a temporary repository structure for testing
+func newTempRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	// ensure a config exists for preference tests
+	cfg := filepath.Join(dir, ".git", "config")
+	if err := os.WriteFile(cfg, []byte(""), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return dir
+}
 
 func TestNewGitInfo(t *testing.T) {
 	// TODO: Replace with actual path
@@ -586,6 +603,7 @@ func TestSortVersionsSemVer2(t *testing.T) {
 
 // TestValidateRepositoryPath tests the validateRepositoryPath function
 func TestValidateRepositoryPath(t *testing.T) {
+	okRepo := newTempRepo(t)
 	tests := []struct {
 		name        string
 		repoPath    string
@@ -597,8 +615,8 @@ func TestValidateRepositoryPath(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "Current directory (should be a git repo)",
-			repoPath:    ".",
+			name:        "Temp git repo",
+			repoPath:    okRepo,
 			expectError: false,
 		},
 		{
@@ -620,14 +638,20 @@ func TestValidateRepositoryPath(t *testing.T) {
 
 // TestFindGitRepoRoot tests the findGitRepoRoot function
 func TestFindGitRepoRoot(t *testing.T) {
+	repo := newTempRepo(t)
+	nested := filepath.Join(repo, "a", "b")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("Failed to create nested directory: %v", err)
+	}
+
 	tests := []struct {
 		name        string
 		startPath   string
 		expectError bool
 	}{
 		{
-			name:        "Current directory (should find git root)",
-			startPath:   ".",
+			name:        "Nested path (should find git root)",
+			startPath:   nested,
 			expectError: false,
 		},
 		{
@@ -687,6 +711,7 @@ func TestGetLatestTagNonSemVer(t *testing.T) {
 
 // TestGetDefaultPushPreference tests the GetDefaultPushPreference function
 func TestGetDefaultPushPreference(t *testing.T) {
+	repo := newTempRepo(t)
 	tests := []struct {
 		name          string
 		repoPath      string
@@ -705,8 +730,8 @@ func TestGetDefaultPushPreference(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:          "Current repo (may not have preference set)",
-			repoPath:      ".",
+			name:          "Temp repo (may not have preference set)",
+			repoPath:      repo,
 			expectError:   false,
 			expectedValue: false,
 			expectedIsSet: false,
@@ -721,7 +746,7 @@ func TestGetDefaultPushPreference(t *testing.T) {
 				return
 			}
 			if !tt.expectError {
-				// For the current repo test, we just verify the function runs without error
+				// For the temp repo test, we just verify the function runs without error
 				// The actual values depend on whether the preference is set
 				_ = value
 				_ = isSet
@@ -732,6 +757,7 @@ func TestGetDefaultPushPreference(t *testing.T) {
 
 // TestSetDefaultPushPreference tests the SetDefaultPushPreference function
 func TestSetDefaultPushPreference(t *testing.T) {
+	repo := newTempRepo(t)
 	tests := []struct {
 		name        string
 		repoPath    string
@@ -751,14 +777,14 @@ func TestSetDefaultPushPreference(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "Current repo - set to true",
-			repoPath:    ".",
+			name:        "Temp repo - set to true",
+			repoPath:    repo,
 			value:       true,
 			expectError: false,
 		},
 		{
-			name:        "Current repo - set to false",
-			repoPath:    ".",
+			name:        "Temp repo - set to false",
+			repoPath:    repo,
 			value:       false,
 			expectError: false,
 		},
@@ -772,7 +798,7 @@ func TestSetDefaultPushPreference(t *testing.T) {
 			}
 
 			// If we successfully set a value, verify we can read it back
-			if !tt.expectError && tt.repoPath == "." {
+			if !tt.expectError && tt.repoPath == repo {
 				value, isSet, err := GetDefaultPushPreference(tt.repoPath)
 				if err != nil {
 					t.Errorf("Failed to read back preference: %v", err)
@@ -956,17 +982,26 @@ func TestGetVersionsErrorPath(t *testing.T) {
 
 // TestCreateTagError tests CreateTag with empty tag
 func TestCreateTagError(t *testing.T) {
+	_ = newTempRepo(t) // Create temp repo for isolation even if not directly used
+
+	// Mock execCommand to avoid actual git calls
+	orig := execCommand
+	defer func() { execCommand = orig }()
+	execCommand = func(name string, arg ...string) *exec.Cmd {
+		return exec.Command("false")
+	}
+
 	// Test with empty string
 	err := CreateTag("")
 	if err == nil {
 		t.Errorf("CreateTag with empty string should return error")
 	}
-	// Note: CreateTag doesn't validate tag format, it delegates to git
-	// So we only test empty string which would fail at git command level
 }
 
 // TestPushTagError tests PushTag error scenarios
 func TestPushTagError(t *testing.T) {
+	_ = newTempRepo(t) // Create temp repo for isolation even if not directly used
+
 	// Mock the execCommand to simulate failure
 	origExecCommand := execCommand
 	defer func() { execCommand = origExecCommand }()
