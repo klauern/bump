@@ -18,3 +18,5 @@ go.work
 bump
 dist/
 coverage.out
+
+.beads/*.db
