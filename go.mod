@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/charmbracelet/log v0.4.2
-	github.com/go-git/go-git/v5 v5.16.2
+	github.com/go-git/go-git/v5 v5.16.3
 	github.com/urfave/cli/v2 v2.27.7
 	gopkg.in/ini.v1 v1.67.0
 )
