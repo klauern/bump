@@ -273,12 +273,12 @@ func TestCompareSuffixes(t *testing.T) {
 		{
 			name:     "Empty suffix1, non-empty suffix2 (no suffix is greater)",
 			suffix1:  "",
-			suffix2:  "alpha",
+			suffix2:  "-alpha",
 			expected: true,
 		},
 		{
 			name:     "Non-empty suffix1, empty suffix2 (no suffix is greater)",
-			suffix1:  "alpha",
+			suffix1:  "-alpha",
 			suffix2:  "",
 			expected: false,
 		},
@@ -289,21 +289,21 @@ func TestCompareSuffixes(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "alpha < beta",
-			suffix1:  "alpha",
-			suffix2:  "beta",
-			expected: true,
-		},
-		{
-			name:     "beta > alpha",
-			suffix1:  "beta",
-			suffix2:  "alpha",
+			name:     "alpha < beta (beta should come first in descending sort)",
+			suffix1:  "-alpha",
+			suffix2:  "-beta",
 			expected: false,
 		},
 		{
+			name:     "beta > alpha (beta should come first in descending sort)",
+			suffix1:  "-beta",
+			suffix2:  "-alpha",
+			expected: true,
+		},
+		{
 			name:     "Equal suffixes",
-			suffix1:  "alpha",
-			suffix2:  "alpha",
+			suffix1:  "-alpha",
+			suffix2:  "-alpha",
 			expected: false,
 		},
 	}
@@ -315,6 +315,272 @@ func TestCompareSuffixes(t *testing.T) {
 				t.Errorf("compareSuffixes(%q, %q) = %v, expected %v", tt.suffix1, tt.suffix2, result, tt.expected)
 			}
 		})
+	}
+}
+
+// TestCompareSuffixesSemVer2 tests compareSuffixes according to SemVer 2.0 specification
+func TestCompareSuffixesSemVer2(t *testing.T) {
+	tests := []struct {
+		name     string
+		suffix1  string
+		suffix2  string
+		expected bool // true if suffix1 > suffix2 (for descending sort)
+	}{
+		// Stable vs pre-release
+		{
+			name:     "stable > pre-release",
+			suffix1:  "",
+			suffix2:  "-alpha",
+			expected: true,
+		},
+		{
+			name:     "pre-release < stable",
+			suffix1:  "-alpha",
+			suffix2:  "",
+			expected: false,
+		},
+		// Numeric comparison within identifiers
+		{
+			name:     "beta.11 > beta.2 (numeric comparison)",
+			suffix1:  "-beta.11",
+			suffix2:  "-beta.2",
+			expected: true,
+		},
+		{
+			name:     "beta.2 < beta.11 (numeric comparison)",
+			suffix1:  "-beta.2",
+			suffix2:  "-beta.11",
+			expected: false,
+		},
+		{
+			name:     "alpha.1 < alpha.2",
+			suffix1:  "-alpha.1",
+			suffix2:  "-alpha.2",
+			expected: false,
+		},
+		// Numeric vs alphanumeric: numeric has lower precedence
+		{
+			name:     "alpha.1 < alpha.beta (numeric < alphanumeric)",
+			suffix1:  "-alpha.1",
+			suffix2:  "-alpha.beta",
+			expected: false,
+		},
+		{
+			name:     "alpha.beta > alpha.1 (alphanumeric > numeric)",
+			suffix1:  "-alpha.beta",
+			suffix2:  "-alpha.1",
+			expected: true,
+		},
+		{
+			name:     "beta.2 < beta.11 < beta.rc",
+			suffix1:  "-beta.11",
+			suffix2:  "-beta.rc",
+			expected: false,
+		},
+		// Longer list has higher precedence when all preceding are equal
+		{
+			name:     "alpha.1 > alpha (more identifiers)",
+			suffix1:  "-alpha.1",
+			suffix2:  "-alpha",
+			expected: true,
+		},
+		{
+			name:     "alpha < alpha.1 (fewer identifiers)",
+			suffix1:  "-alpha",
+			suffix2:  "-alpha.1",
+			expected: false,
+		},
+		{
+			name:     "alpha.beta.gamma > alpha.beta",
+			suffix1:  "-alpha.beta.gamma",
+			suffix2:  "-alpha.beta",
+			expected: true,
+		},
+		// Lexical comparison for alphanumeric
+		{
+			name:     "alpha < beta (lexical)",
+			suffix1:  "-alpha",
+			suffix2:  "-beta",
+			expected: false,
+		},
+		{
+			name:     "beta > alpha (lexical)",
+			suffix1:  "-beta",
+			suffix2:  "-alpha",
+			expected: true,
+		},
+		{
+			name:     "rc > beta (lexical)",
+			suffix1:  "-rc",
+			suffix2:  "-beta",
+			expected: true,
+		},
+		// SemVer 2.0 canonical example sequence:
+		// 1.0.0-alpha < 1.0.0-alpha.1 < 1.0.0-alpha.beta < 1.0.0-beta < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0
+		{
+			name:     "alpha < alpha.1",
+			suffix1:  "-alpha",
+			suffix2:  "-alpha.1",
+			expected: false,
+		},
+		{
+			name:     "alpha.1 < alpha.beta",
+			suffix1:  "-alpha.1",
+			suffix2:  "-alpha.beta",
+			expected: false,
+		},
+		{
+			name:     "alpha.beta < beta",
+			suffix1:  "-alpha.beta",
+			suffix2:  "-beta",
+			expected: false,
+		},
+		{
+			name:     "beta < beta.2",
+			suffix1:  "-beta",
+			suffix2:  "-beta.2",
+			expected: false,
+		},
+		{
+			name:     "beta.2 < beta.11",
+			suffix1:  "-beta.2",
+			suffix2:  "-beta.11",
+			expected: false,
+		},
+		{
+			name:     "beta.11 < rc.1",
+			suffix1:  "-beta.11",
+			suffix2:  "-rc.1",
+			expected: false,
+		},
+		{
+			name:     "rc.1 < stable",
+			suffix1:  "-rc.1",
+			suffix2:  "",
+			expected: false,
+		},
+		// Equal identifiers
+		{
+			name:     "alpha.1 == alpha.1",
+			suffix1:  "-alpha.1",
+			suffix2:  "-alpha.1",
+			expected: false,
+		},
+		{
+			name:     "beta.11 == beta.11",
+			suffix1:  "-beta.11",
+			suffix2:  "-beta.11",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := compareSuffixes(tt.suffix1, tt.suffix2)
+			if result != tt.expected {
+				t.Errorf("compareSuffixes(%q, %q) = %v, expected %v", tt.suffix1, tt.suffix2, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestParseNumericIdentifier tests the parseNumericIdentifier function
+func TestParseNumericIdentifier(t *testing.T) {
+	tests := []struct {
+		name        string
+		identifier  string
+		expectedNum int
+		expectedOk  bool
+	}{
+		{
+			name:        "Simple numeric",
+			identifier:  "123",
+			expectedNum: 123,
+			expectedOk:  true,
+		},
+		{
+			name:        "Zero",
+			identifier:  "0",
+			expectedNum: 0,
+			expectedOk:  true,
+		},
+		{
+			name:        "Large number",
+			identifier:  "999999",
+			expectedNum: 999999,
+			expectedOk:  true,
+		},
+		{
+			name:        "Alphanumeric",
+			identifier:  "alpha",
+			expectedNum: 0,
+			expectedOk:  false,
+		},
+		{
+			name:        "Mixed alphanumeric",
+			identifier:  "beta1",
+			expectedNum: 0,
+			expectedOk:  false,
+		},
+		{
+			name:        "With dash",
+			identifier:  "1-2",
+			expectedNum: 0,
+			expectedOk:  false,
+		},
+		{
+			name:        "Empty string",
+			identifier:  "",
+			expectedNum: 0,
+			expectedOk:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			num, ok := parseNumericIdentifier(tt.identifier)
+			if ok != tt.expectedOk {
+				t.Errorf("parseNumericIdentifier(%q) ok = %v, expected %v", tt.identifier, ok, tt.expectedOk)
+			}
+			if ok && num != tt.expectedNum {
+				t.Errorf("parseNumericIdentifier(%q) num = %v, expected %v", tt.identifier, num, tt.expectedNum)
+			}
+		})
+	}
+}
+
+// TestSortVersionsSemVer2 tests that version sorting follows SemVer 2.0 specification
+func TestSortVersionsSemVer2(t *testing.T) {
+	// Test the canonical SemVer 2.0 example sequence
+	versions := []*tagVersion{
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "", Tag: "v1.0.0"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-rc.1", Tag: "v1.0.0-rc.1"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-beta.11", Tag: "v1.0.0-beta.11"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-beta.2", Tag: "v1.0.0-beta.2"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-beta", Tag: "v1.0.0-beta"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha.beta", Tag: "v1.0.0-alpha.beta"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha.1", Tag: "v1.0.0-alpha.1"},
+		{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha", Tag: "v1.0.0-alpha"},
+	}
+
+	sortVersions(versions)
+
+	// After sorting in descending order, the expected order is:
+	expected := []string{
+		"v1.0.0",           // stable version highest
+		"v1.0.0-rc.1",      // rc > beta
+		"v1.0.0-beta.11",   // beta.11 > beta.2 (numeric comparison)
+		"v1.0.0-beta.2",    // beta.2 > beta (more identifiers)
+		"v1.0.0-beta",      // beta > alpha.beta (lexical)
+		"v1.0.0-alpha.beta", // alpha.beta > alpha.1 (alphanumeric > numeric)
+		"v1.0.0-alpha.1",   // alpha.1 > alpha (more identifiers)
+		"v1.0.0-alpha",     // alpha lowest
+	}
+
+	for i, v := range versions {
+		if v.Tag != expected[i] {
+			t.Errorf("Position %d: expected %s, got %s", i, expected[i], v.Tag)
+		}
 	}
 }
 
@@ -774,25 +1040,31 @@ func TestCompareVersionsWithSuffixes(t *testing.T) {
 	}{
 		{
 			name:     "Same version, v1 has suffix, v2 has no suffix (v2 should be greater)",
-			v1:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "alpha"},
+			v1:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha"},
 			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: ""},
 			expected: false,
 		},
 		{
 			name:     "Same version, v1 has no suffix, v2 has suffix (v1 should be greater)",
 			v1:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: ""},
-			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "alpha"},
+			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha"},
 			expected: true,
 		},
 		{
-			name:     "Same version, alpha vs beta (as implemented, alpha > beta)",
-			v1:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "alpha"},
-			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "beta"},
-			expected: true, // Based on current implementation: suffix1 < suffix2 returns true
+			name:     "Same version, beta > alpha per SemVer (beta should come first)",
+			v1:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha"},
+			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "-beta"},
+			expected: false,
+		},
+		{
+			name:     "Same version, beta > alpha per SemVer (beta should come first)",
+			v1:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "-beta"},
+			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: "-alpha"},
+			expected: true,
 		},
 		{
 			name:     "Different major versions",
-			v1:       &tagVersion{Major: 2, Minor: 0, Patch: 0, Suffix: "alpha"},
+			v1:       &tagVersion{Major: 2, Minor: 0, Patch: 0, Suffix: "-alpha"},
 			v2:       &tagVersion{Major: 1, Minor: 0, Patch: 0, Suffix: ""},
 			expected: true,
 		},
