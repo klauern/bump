@@ -151,4 +151,8 @@ Then use `mcp__beads__*` functions instead of CLI commands.
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
 
+### Known Limitations
+
+- **`bd stale` command**: Not functional in bd 0.16.0 (requires `issue_execution_state` and `executor_instances` tables that are not created). This is an executor/claim tracking feature that's not fully implemented yet. Use standard workflow commands instead.
+
 For more details, see README.md and QUICKSTART.md.
