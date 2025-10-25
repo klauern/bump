@@ -18,3 +18,10 @@ go.work
 bump
 dist/
 coverage.out
+
+# Beads runtime files
+.beads/*.db
+.beads/*.db-shm
+.beads/*.db-wal
+.beads/daemon.lock
+.beads/daemon.pid
