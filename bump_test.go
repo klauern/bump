@@ -964,8 +964,8 @@ func TestGitLockReleaseNotAcquired(t *testing.T) {
 	}
 }
 
-// TestGetVersionsErrorPath tests getVersions with an iterator that returns an error
-func TestGetVersionsErrorPath(t *testing.T) {
+// TestGetVersionsWithValidReferences tests getVersions successfully processes valid references
+func TestGetVersionsWithValidReferences(t *testing.T) {
 	refs := []plumbing.Reference{
 		*plumbing.NewReferenceFromStrings("refs/tags/v1.0.0", "a670469b3e8a6e2e6d53635b3f3e6b1b8f6bcf43"),
 	}
