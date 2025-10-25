@@ -226,15 +226,75 @@ func compareVersions(version1, version2 *tagVersion) bool {
 	return compareSuffixes(version1.Suffix, version2.Suffix)
 }
 
-// compareSuffixes compares two suffixes in semantic versions.
+// compareSuffixes compares two suffixes in semantic versions according to SemVer 2.0 spec.
+// Returns true if suffix1 > suffix2 (for descending sort order).
 func compareSuffixes(suffix1, suffix2 string) bool {
+	// Per SemVer 2.0: stable version (no suffix) > any pre-release version
 	if suffix1 == "" && suffix2 != "" {
 		return true
 	}
 	if suffix1 != "" && suffix2 == "" {
 		return false
 	}
-	return suffix1 < suffix2
+
+	// Both have suffixes - compare according to SemVer 2.0 rules
+	// Strip leading dashes and split by dots
+	ids1 := strings.Split(strings.TrimPrefix(suffix1, "-"), ".")
+	ids2 := strings.Split(strings.TrimPrefix(suffix2, "-"), ".")
+
+	// Compare identifiers left to right
+	for i := 0; i < len(ids1) && i < len(ids2); i++ {
+		id1 := ids1[i]
+		id2 := ids2[i]
+
+		// Check if identifiers are numeric
+		num1, isNum1 := parseNumericIdentifier(id1)
+		num2, isNum2 := parseNumericIdentifier(id2)
+
+		if isNum1 && isNum2 {
+			// Both numeric: compare numerically
+			if num1 != num2 {
+				return num1 > num2
+			}
+		} else if isNum1 && !isNum2 {
+			// Numeric has lower precedence than alphanumeric
+			return false
+		} else if !isNum1 && isNum2 {
+			// Alphanumeric has higher precedence than numeric
+			return true
+		} else {
+			// Both alphanumeric: compare lexically
+			if id1 != id2 {
+				return id1 > id2
+			}
+		}
+	}
+
+	// All compared identifiers are equal; longer list has higher precedence
+	return len(ids1) > len(ids2)
+}
+
+// parseNumericIdentifier checks if an identifier consists only of digits
+// and returns its numeric value if so.
+func parseNumericIdentifier(id string) (int, bool) {
+	if id == "" {
+		return 0, false
+	}
+
+	// Check if all characters are digits
+	for _, ch := range id {
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+	}
+
+	// Parse as integer
+	num, err := strconv.Atoi(id)
+	if err != nil {
+		return 0, false
+	}
+
+	return num, true
 }
 
 // GetLatestTag returns the latest semantic version tag in the given git tags.
