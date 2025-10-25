@@ -1,0 +1,107 @@
+---
+globs: "cmd/**/*.go"
+---
+# CLI Development Guidelines
+
+## File Organization
+
+**Important**: Commands should be split into separate files to improve maintainability.
+
+Current state: [main.go](mdc:cmd/bump/main.go) is 396 lines - this should be refactored.
+
+Recommended structure:
+```
+cmd/bump/
+├── main.go          # App initialization only (~50-100 lines)
+├── cmd_patch.go     # Patch command implementation
+├── cmd_minor.go     # Minor command implementation
+├── cmd_major.go     # Major command implementation
+├── cmd_push.go      # Push command implementation
+├── cmd_config.go    # Config command implementation
+└── shared.go        # Shared utilities (only when they grow large)
+```
+
+## Command Structure
+
+Use urfave/cli patterns consistently:
+
+```go
+// In cmd_patch.go
+func NewPatchCommand() *cli.Command {
+    return &cli.Command{
+        Name:    "patch",
+        Aliases: []string{"p"},
+        Usage:   "Bump the patch version",
+        Flags: []cli.Flag{
+            &cli.StringFlag{
+                Name:  "suffix",
+                Usage: "Add a suffix to the version",
+            },
+            &cli.BoolFlag{
+                Name:  "push",
+                Usage: "Push the tag to remote after creating it",
+            },
+        },
+        Action: patchAction,
+    }
+}
+
+func patchAction(c *cli.Context) error {
+    // Implementation here
+}
+```
+
+## Utility Organization
+
+- Keep shared utilities in main.go initially
+- When utilities grow, create purpose-specific files:
+  - `git_utils.go` for git-related helpers
+  - `version_utils.go` for version manipulation
+  - `file_utils.go` for file operations
+- **Never** create generic `util.go` or `utils.go` files
+
+## Flag Handling Best Practices
+
+```go
+// Check if flag was explicitly set
+if c.IsSet("push") {
+    shouldPush = c.Bool("push")
+} else {
+    // Fall back to repo config
+    shouldPush = getDefaultPushPreference()
+}
+
+// Validate conflicting flags
+if c.Bool("dry-run") && c.Bool("push") {
+    return fmt.Errorf("cannot use --dry-run with --push")
+}
+```
+
+## User Interaction Patterns
+
+1. **Clear output**: Always provide clear feedback
+   ```go
+   fmt.Printf("Creating tag: %s\n", nextTag)
+   fmt.Println("Successfully pushed tags to remote.")
+   ```
+
+2. **Error messages**: Be specific and helpful
+   ```go
+   return fmt.Errorf("failed to find git root: %v", err)
+   ```
+
+3. **Dry-run support**: Show what would happen
+   ```go
+   if dryRun {
+       fmt.Printf("Would create tag: %s\n", nextTag)
+       return nil
+   }
+   ```
+
+## Current Refactoring Opportunities
+
+From [main.go](mdc:cmd/bump/main.go):
+1. Extract `createCommand()` logic to separate command files
+2. Move `updateVersionInFile()` to a file operations module
+3. Split `findGitRoot()` and git-related helpers to git utilities
+4. Keep only app initialization and shared small utilities in main.go

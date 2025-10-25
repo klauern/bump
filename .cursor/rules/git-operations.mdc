@@ -1,0 +1,143 @@
+---
+description: "Git operations and tagging guidance for bump tool development"
+---
+# Git Operations Guidelines
+
+## go-git Library Usage
+
+This project uses go-git/go-git/v5 for git operations. Key patterns:
+
+### Opening Repositories
+```go
+// Always validate the path first
+if err := validateRepositoryPath(path); err != nil {
+    return nil, fmt.Errorf("invalid repository: %w", err)
+}
+
+// Open the repository
+r, err := git.PlainOpen(path)
+if err != nil {
+    log.Error("Error opening git repository: ", "err", err)
+    return nil, err
+}
+```
+
+### Working with Tags
+```go
+// Get all tags
+tagRefs, err := r.Tags()
+if err != nil {
+    return nil, fmt.Errorf("failed to get tags: %w", err)
+}
+defer tagRefs.Close() // Always close iterators
+
+// Iterate through tags
+err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
+    tag := ref.Name().Short()
+    // Process tag
+    return nil
+})
+```
+
+## Lock Management
+
+**Critical**: Always acquire locks for git operations to prevent corruption.
+
+### Lock Pattern
+```go
+func doGitOperation(repoPath string) error {
+    // Acquire lock first
+    lock, err := acquireGitLock(repoPath)
+    if err != nil {
+        return fmt.Errorf("failed to acquire git lock: %w", err)
+    }
+    defer lock.Release() // Always release the lock
+
+    // Perform git operations here
+    return nil
+}
+```
+
+### Lock Implementation Details
+- File-based locks in `.git/bump.lock`
+- In-process mutex per repository path
+- Stale lock removal after 5 minutes
+- Maximum 30 attempts with 100ms timeout
+
+## Tag Format Specifications
+
+### Semantic Version Format
+- Pattern: `v{major}.{minor}.{patch}[-suffix]`
+- Regex: `^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`
+- Examples: `v1.2.3`, `v2.0.0-rc1`, `v0.1.0-beta.2`
+
+### Tag Creation
+```go
+// Create tag with current HEAD
+cmd := execCommand("git", "tag", tagName)
+if output, err := cmd.CombinedOutput(); err != nil {
+    return fmt.Errorf("failed to create tag: %s", output)
+}
+```
+
+### Tag Pushing
+```go
+// Push tags to remote
+cmd := execCommand("git", "push", "--tags")
+if output, err := cmd.CombinedOutput(); err != nil {
+    return fmt.Errorf("failed to push tags: %s", output)
+}
+```
+
+## Repository Validation
+
+Always validate repository paths before operations:
+
+```go
+func validateRepositoryPath(path string) error {
+    // Check if path exists
+    info, err := os.Stat(path)
+    if err != nil {
+        return fmt.Errorf("path does not exist: %w", err)
+    }
+
+    // Check if it's a directory
+    if !info.IsDir() {
+        return fmt.Errorf("path is not a directory")
+    }
+
+    // Check for .git directory
+    gitPath := filepath.Join(path, ".git")
+    if _, err := os.Stat(gitPath); err != nil {
+        return fmt.Errorf("not a git repository (no .git directory)")
+    }
+
+    return nil
+}
+```
+
+## Configuration Management
+
+Repository-specific settings are stored in `.git/config`:
+
+```go
+// Read config
+cfg := ini.Empty()
+configPath := filepath.Join(repoPath, ".git", "config")
+if err := cfg.Append(configPath); err != nil {
+    return false // Default value
+}
+
+// Get bump section
+section := cfg.Section("bump")
+return section.Key("defaultpush").MustBool(false)
+```
+
+## Best Practices
+
+1. **Always use locks** for write operations
+2. **Validate inputs** before git operations
+3. **Handle errors gracefully** with meaningful messages
+4. **Close resources** (iterators, file handles)
+5. **Log operations** for debugging
+6. **Test with mocks** using the execCommand pattern

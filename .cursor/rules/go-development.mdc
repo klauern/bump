@@ -1,0 +1,70 @@
+---
+globs: "*.go"
+---
+# Go Development Standards
+
+## Code Formatting & Linting
+
+- **Formatter**: Use `gofumpt` (preferred over `gofmt`)
+- **Linter**: Use `golangci-lint` via `task lint`
+- Always format code before committing
+
+## Error Handling Patterns
+
+Follow the project's error handling conventions:
+```go
+// Wrap errors with context
+if err != nil {
+    return fmt.Errorf("failed to open repository: %w", err)
+}
+
+// Log errors appropriately
+if err != nil {
+    log.Error("Error opening git repository: ", "err", err)
+}
+```
+
+## Logging Practices
+
+Use charmbracelet/log for structured logging:
+```go
+// Debug logging (enabled via DEBUG env var)
+log.Debug("Processing tag", "tag", tag)
+
+// Error logging with structured fields
+log.Error("failed to create lock file", "lockFile", lockFile, "err", err)
+
+// Warning for unusual conditions
+log.Warn("Removing stale lock file", "lockFile", lockFile, "age", time.Since(stat.ModTime()))
+```
+
+## Git Operation Safety
+
+When working with git operations:
+1. Always acquire locks using `acquireGitLock()` before git operations
+2. Use defer to ensure lock release: `defer lock.Release()`
+3. Validate repository paths with `validateRepositoryPath()`
+4. Handle stale locks (older than 5 minutes)
+
+Example pattern from [bump.go](mdc:bump.go):
+```go
+lock, err := acquireGitLock(repoPath)
+if err != nil {
+    return fmt.Errorf("failed to acquire git lock: %w", err)
+}
+defer lock.Release()
+```
+
+## Testing Patterns
+
+- Use table-driven tests (see [bump_test.go](mdc:bump_test.go))
+- Mock external commands using the `execCommand` variable
+- Aim for 80-85% test coverage
+- Use subtests with `t.Run()` for better organization
+
+## Package Organization
+
+- Keep packages focused and cohesive
+- Export only what's necessary
+- Document all exported functions and types
+- Use meaningful variable and function names

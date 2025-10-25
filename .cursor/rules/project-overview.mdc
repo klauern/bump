@@ -1,0 +1,50 @@
+---
+alwaysApply: true
+---
+# Bump - Semantic Versioning Tool
+
+This is a Go CLI tool for managing semantic versioning and git tags. The tool helps you bump versions (patch, minor, major) and manage git tags with optional push capabilities.
+
+## Project Structure
+
+- **Core Library**: [bump.go](mdc:bump.go) - Contains semantic versioning logic, git operations, and tag management
+- **CLI Application**: [cmd/bump/main.go](mdc:cmd/bump/main.go) - Command-line interface using urfave/cli
+- **Tests**: [bump_test.go](mdc:bump_test.go) - Unit tests for core functionality
+- **Mocks**: [mocks.go](mdc:mocks.go) - Mock implementations for testing
+- **Task Runner**: [Taskfile.yml](mdc:Taskfile.yml) - Build and development tasks
+- **Agent Guide**: [AGENTS.md](mdc:AGENTS.md) - Comprehensive guide for AI agents
+
+## Key Dependencies
+
+- **urfave/cli/v2**: Command-line interface framework
+- **go-git/go-git/v5**: Git operations (reading tags, creating tags)
+- **charmbracelet/log**: Structured logging
+- **gopkg.in/ini.v1**: Git config file parsing
+
+## Available Commands
+
+### Build & Development
+- `task build` - Build the bump binary
+- `task install` - Install bump to GOPATH
+- `task clean` - Remove build artifacts
+
+### Testing & Quality
+- `task test` - Run tests with coverage (target: 80-85%, currently 61.6%)
+- `task lint` - Run golangci-lint
+
+### CLI Commands
+- `bump patch|minor|major [--suffix] [--push] [--update-file]` - Version bumping
+- `bump push` - Push existing tags to remote
+- `bump config --default-push[=true|false]` - Configure push behavior
+
+## Version Format
+
+The tool follows semantic versioning: `v{major}.{minor}.{patch}[-suffix]`
+- Regex pattern: `^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`
+
+## Issue Tracking
+
+This project uses **bd (beads)** for issue tracking. See [AGENTS.md](mdc:AGENTS.md) for details.
+- Check ready work: `bd ready --json`
+- Create issues: `bd create "title" -t task -p 2 --json`
+- NO markdown TODOs or task lists allowed

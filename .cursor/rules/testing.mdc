@@ -1,0 +1,103 @@
+---
+globs: "*_test.go"
+---
+# Testing Standards
+
+## Coverage Requirements
+
+- **Target**: 80-85% test coverage
+- **Current Status**:
+  - Core package: 61.6% ⚠️ (needs improvement)
+  - cmd/bump: 0% ❌ (critical - needs tests)
+- Run `task test` to check coverage and generate HTML report
+
+## Table-Driven Tests
+
+Prefer table-driven tests for comprehensive coverage:
+
+```go
+func TestGetNextTag(t *testing.T) {
+    tests := []struct {
+        name        string
+        currentTag  string
+        bumpType    string
+        suffix      string
+        expected    string
+        expectError bool
+    }{
+        {"bump patch", "v1.2.3", "patch", "", "v1.2.4", false},
+        {"bump minor", "v1.2.3", "minor", "", "v1.3.0", false},
+        {"bump major", "v1.2.3", "major", "", "v2.0.0", false},
+        {"with suffix", "v1.2.3", "patch", "rc1", "v1.2.4-rc1", false},
+        {"invalid tag", "invalid", "patch", "", "", true},
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result, err := GetNextTag(tt.currentTag, tt.bumpType, tt.suffix)
+            if tt.expectError {
+                if err == nil {
+                    t.Errorf("expected error but got none")
+                }
+            } else {
+                if err != nil {
+                    t.Errorf("unexpected error: %v", err)
+                }
+                if result != tt.expected {
+                    t.Errorf("got %s, want %s", result, tt.expected)
+                }
+            }
+        })
+    }
+}
+```
+
+## Subtests
+
+Use subtests for better organization and debugging:
+```go
+t.Run("edge cases", func(t *testing.T) {
+    t.Run("empty string", func(t *testing.T) {
+        // test implementation
+    })
+    t.Run("nil input", func(t *testing.T) {
+        // test implementation
+    })
+})
+```
+
+## Mocking Patterns
+
+The project uses a mocking pattern for external commands:
+
+```go
+// In production code (bump.go):
+var execCommand = exec.Command
+
+// In test code:
+func TestPushTag(t *testing.T) {
+    // Save original and restore after test
+    oldExecCommand := execCommand
+    defer func() { execCommand = oldExecCommand }()
+
+    // Mock the command
+    execCommand = mockExecCommand
+}
+```
+
+See [mocks.go](mdc:mocks.go) for mock implementations.
+
+## Test Organization
+
+- Group related tests together
+- Use descriptive test names that explain the scenario
+- Test both success and error cases
+- Include edge cases and boundary conditions
+- Test concurrent operations where applicable
+
+## Priority Areas for Testing
+
+1. **cmd/bump/main.go** - Currently 0% coverage, needs immediate attention
+2. Git operations that aren't fully covered
+3. Error handling paths
+4. Edge cases in version parsing and comparison

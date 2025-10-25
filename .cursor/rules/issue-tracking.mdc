@@ -1,0 +1,81 @@
+---
+description: "Issue tracking and task management using bd (beads)"
+---
+# Issue Tracking with bd (beads)
+
+**CRITICAL**: This project uses bd (beads) for ALL issue tracking. Do NOT create markdown TODOs, task lists, or other tracking methods.
+
+## Quick Reference
+
+The full bd documentation is maintained in [AGENTS.md](mdc:AGENTS.md#issue-tracking-with-bd-beads). Key commands:
+
+### Check for work
+```bash
+bd ready --json          # Show unblocked issues
+bd list --json           # List all issues
+bd show bd-123 --json    # Show specific issue details
+```
+
+### Create issues
+```bash
+bd create "Add tests for CLI commands" -t task -p 1 --json
+bd create "Fix coverage below 80%" -t bug -p 0 --deps discovered-from:bd-42 --json
+```
+
+### Update status
+```bash
+bd update bd-123 --status in_progress --json
+bd update bd-123 --priority 2 --json
+bd close bd-123 --reason "Implemented" --json
+```
+
+## Workflow for Code Changes
+
+1. **Before starting work**: Check if there's an existing issue
+   ```bash
+   bd ready --json
+   ```
+
+2. **When you discover new work**: Create linked issues
+   ```bash
+   # Found while working on bd-123
+   bd create "Refactor main.go into separate command files" -t task -p 2 --deps discovered-from:bd-123 --json
+   ```
+
+3. **Track test coverage issues**:
+   ```bash
+   # Current coverage is 61.6%, needs to be 80-85%
+   bd create "Increase test coverage to 80%" -t task -p 1 --json
+   bd create "Add tests for cmd/bump (0% coverage)" -t bug -p 0 --json
+   ```
+
+## Important Rules
+
+✅ **DO**:
+- Use bd for ALL task tracking
+- Always use `--json` flag for programmatic use
+- Link discovered work with `discovered-from` dependencies
+- Check `bd ready` before starting new work
+
+❌ **DON'T**:
+- Create markdown TODO lists
+- Add TODO comments in code (create bd issues instead)
+- Use external issue trackers
+- Track tasks in multiple places
+
+## Getting Latest Instructions
+
+If you need the latest bd onboarding instructions:
+```bash
+bd onboard
+```
+
+This will show the most up-to-date workflow and command reference.
+
+## Auto-Sync
+
+bd automatically syncs with git:
+- Issues are stored in `.beads/issues.jsonl`
+- Changes export automatically (5s debounce)
+- Imports happen after `git pull`
+- No manual sync needed!
