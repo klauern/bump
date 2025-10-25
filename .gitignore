@@ -25,3 +25,5 @@ coverage.out
 .beads/*.db-wal
 .beads/daemon.lock
 .beads/daemon.pid
+
+!.cursor/
