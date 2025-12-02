@@ -269,8 +269,7 @@ func TestCreateTagAnnotatedRequirement(t *testing.T) {
 	runGit("init")
 	runGit("config", "user.name", "Test User")
 	runGit("config", "user.email", "test@example.com")
-	runGit("config", "tag.gpgSign", "false")           // ensure no signing requirement in test
-	runGit("config", "tag.forceSignAnnotated", "true") // require annotated tags (needs message)
+	runGit("config", "tag.gpgSign", "false") // ensure no signing requirement in test
 
 	readme := filepath.Join(repoDir, "README.md")
 	if err := os.WriteFile(readme, []byte("test"), 0o644); err != nil {
