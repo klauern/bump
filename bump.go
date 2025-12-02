@@ -27,15 +27,17 @@ var execCommand = exec.Command
 // semanticVersionRegex is a regular expression for semantic versioning.
 var semanticVersionRegex = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`)
 
-// gitLocks stores file-based locks per repository to prevent concurrent git operations
+// gitLocks stores file-based locks per repository to prevent concurrent git operations.
 var gitLocks = make(map[string]*sync.Mutex)
+
+// gitLocksMutex protects concurrent access to the gitLocks map.
 var gitLocksMutex sync.RWMutex
 
-// GitLock represents a file-based lock for git operations
+// GitLock represents a file-based lock for git operations.
 type GitLock struct {
-	lockFile string
-	acquired bool
-	mutex    *sync.Mutex
+	lockFile string       // lockFile is the path to the lock file
+	acquired bool         // acquired indicates whether the lock has been successfully acquired
+	mutex    *sync.Mutex // mutex is the in-process mutex for this repository
 }
 
 // acquireGitLock acquires a file-based lock for git operations on the specified repository.
@@ -134,9 +136,11 @@ func (lock *GitLock) Release() error {
 
 // tagVersion represents a semantic version of a git tag.
 type tagVersion struct {
-	Major, Minor, Patch int    // Major, Minor, and Patch represent the major, minor, and patch versions respectively.
-	Suffix              string // Suffix represents the optional suffix in a semantic version.
-	Tag                 string // Tag represents the original tag string.
+	Major  int    // Major is the major version number
+	Minor  int    // Minor is the minor version number
+	Patch  int    // Patch is the patch version number
+	Suffix string // Suffix is the optional pre-release suffix (e.g., "-alpha", "-beta.1")
+	Tag    string // Tag is the original git tag string
 }
 
 // NewGitInfo returns the semantic versions of all git tags in the repository at the given path.
