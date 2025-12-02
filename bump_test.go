@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -248,6 +249,54 @@ func TestCreateTagInvalid(t *testing.T) {
 	err := CreateTag("")
 	if err == nil {
 		t.Errorf("Expected error for invalid tag, got nil")
+	}
+}
+
+func TestCreateTagAnnotatedRequirement(t *testing.T) {
+	repoDir := t.TempDir()
+
+	runGit := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoDir
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v; output: %s", args, err, string(output))
+		}
+		return string(output)
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "Test User")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "tag.gpgSign", "false")           // ensure no signing requirement in test
+	runGit("config", "tag.forceSignAnnotated", "true") // require annotated tags (needs message)
+
+	readme := filepath.Join(repoDir, "README.md")
+	if err := os.WriteFile(readme, []byte("test"), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	runGit("add", "README.md")
+	runGit("commit", "-m", "initial commit")
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("chdir to repo: %v", err)
+	}
+
+	if err := CreateTag("v0.0.1-test"); err != nil {
+		t.Fatalf("CreateTag failed: %v", err)
+	}
+
+	tags := runGit("tag", "--list")
+	if !strings.Contains(tags, "v0.0.1-test") {
+		t.Fatalf("expected tag to be created, got: %s", tags)
 	}
 }
 
@@ -584,14 +633,14 @@ func TestSortVersionsSemVer2(t *testing.T) {
 
 	// After sorting in descending order, the expected order is:
 	expected := []string{
-		"v1.0.0",           // stable version highest
-		"v1.0.0-rc.1",      // rc > beta
-		"v1.0.0-beta.11",   // beta.11 > beta.2 (numeric comparison)
-		"v1.0.0-beta.2",    // beta.2 > beta (more identifiers)
-		"v1.0.0-beta",      // beta > alpha.beta (lexical)
+		"v1.0.0",            // stable version highest
+		"v1.0.0-rc.1",       // rc > beta
+		"v1.0.0-beta.11",    // beta.11 > beta.2 (numeric comparison)
+		"v1.0.0-beta.2",     // beta.2 > beta (more identifiers)
+		"v1.0.0-beta",       // beta > alpha.beta (lexical)
 		"v1.0.0-alpha.beta", // alpha.beta > alpha.1 (alphanumeric > numeric)
-		"v1.0.0-alpha.1",   // alpha.1 > alpha (more identifiers)
-		"v1.0.0-alpha",     // alpha lowest
+		"v1.0.0-alpha.1",    // alpha.1 > alpha (more identifiers)
+		"v1.0.0-alpha",      // alpha lowest
 	}
 
 	for i, v := range versions {
@@ -1019,9 +1068,9 @@ func TestPushTagError(t *testing.T) {
 // TestParseTagVersionEdgeCases tests ParseTagVersion with edge cases
 func TestParseTagVersionEdgeCases(t *testing.T) {
 	tests := []struct {
-		name      string
-		tag       string
-		expectOk  bool
+		name     string
+		tag      string
+		expectOk bool
 	}{
 		{
 			name:     "Valid version with pre-release",

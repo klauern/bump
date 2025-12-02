@@ -63,23 +63,23 @@ func acquireGitLock(repoPath string) (*GitLock, error) {
 	repoMutex.Lock()
 
 	lockFile := filepath.Join(absRepoPath, ".git", "bump.lock")
-	
+
 	// Try to acquire file-based lock with timeout
 	const maxAttempts = 30
 	const lockTimeout = 100 * time.Millisecond
-	
+
 	var lockFileHandle *os.File
 	for i := 0; i < maxAttempts; i++ {
 		lockFileHandle, err = os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 		if err == nil {
 			break
 		}
-		
+
 		if !os.IsExist(err) {
 			repoMutex.Unlock()
 			return nil, fmt.Errorf("failed to create lock file: %w", err)
 		}
-		
+
 		// Check if existing lock file is stale (older than 5 minutes)
 		if stat, statErr := os.Stat(lockFile); statErr == nil {
 			if time.Since(stat.ModTime()) > 5*time.Minute {
@@ -90,10 +90,10 @@ func acquireGitLock(repoPath string) (*GitLock, error) {
 				continue
 			}
 		}
-		
+
 		time.Sleep(lockTimeout)
 	}
-	
+
 	if lockFileHandle == nil {
 		repoMutex.Unlock()
 		return nil, fmt.Errorf("failed to acquire git lock after %d attempts: repository may be busy", maxAttempts)
@@ -386,7 +386,7 @@ func CreateTag(tag string) error {
 	if err != nil {
 		return fmt.Errorf("failed to find git repository: %w", err)
 	}
-	
+
 	return createTagWithLock(repoPath, tag)
 }
 
@@ -397,7 +397,7 @@ func PushTag() error {
 	if err != nil {
 		return fmt.Errorf("failed to find git repository: %w", err)
 	}
-	
+
 	return pushTagWithLock(repoPath)
 }
 
@@ -433,10 +433,10 @@ func pushTagWithLock(repoPath string) error {
 
 // createTag creates a new git tag with the given tag.
 func createTag(tag string) error {
-	cmdTag := execCommand("git", "tag", tag)
-	if err := cmdTag.Run(); err != nil {
-		log.Error("failed to create tag", "err", err)
-		return fmt.Errorf("failed to create tag: %w", err)
+	cmdTag := execCommand("git", "tag", "-m", tag, tag)
+	if output, err := cmdTag.CombinedOutput(); err != nil {
+		log.Error("failed to create tag", "err", err, "output", string(output))
+		return fmt.Errorf("failed to create tag: %w; %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }
@@ -444,9 +444,9 @@ func createTag(tag string) error {
 // pushTag pushes the latest git tag to the remote repository.
 func pushTag() error {
 	cmdPush := execCommand("git", "push", "--tags")
-	if err := cmdPush.Run(); err != nil {
-		log.Error("failed to push tag", "err", err)
-		return fmt.Errorf("failed to push tag: %w", err)
+	if output, err := cmdPush.CombinedOutput(); err != nil {
+		log.Error("failed to push tag", "err", err, "output", string(output))
+		return fmt.Errorf("failed to push tag: %w; %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }
@@ -476,7 +476,7 @@ func GetDefaultPushPreference(repoPath string) (bool, bool, error) {
 	}
 
 	configPath := filepath.Join(repoPath, ".git", "config")
-	
+
 	// Check if config file exists and is readable
 	if _, err := os.Stat(configPath); err != nil {
 		if os.IsNotExist(err) {
@@ -499,7 +499,7 @@ func GetDefaultPushPreference(repoPath string) (bool, bool, error) {
 	val := section.Key("defaultPush").String()
 	switch val {
 	case "true":
-		return true, true, nil  // value=true, isSet=true
+		return true, true, nil // value=true, isSet=true
 	case "false":
 		return false, true, nil // value=false, isSet=true (explicitly set to false)
 	default:
@@ -510,13 +510,13 @@ func GetDefaultPushPreference(repoPath string) (bool, bool, error) {
 // SetDefaultPushPreference writes the [bump] defaultPush value to .git/config in the given repo path.
 // Uses atomic writes to prevent corruption.
 func SetDefaultPushPreference(repoPath string, value bool) error {
-	// Validate repository path  
+	// Validate repository path
 	if err := validateRepositoryPath(repoPath); err != nil {
 		return fmt.Errorf("invalid repository path: %w", err)
 	}
 
 	configPath := filepath.Join(repoPath, ".git", "config")
-	
+
 	// Check if config file exists and is writable
 	if _, err := os.Stat(configPath); err != nil {
 		if os.IsNotExist(err) {
@@ -527,7 +527,7 @@ func SetDefaultPushPreference(repoPath string, value bool) error {
 
 	// Create backup file path for atomic operation
 	backupPath := configPath + ".bump.tmp"
-	
+
 	// Load current config
 	cfg, err := ini.Load(configPath)
 	if err != nil {
