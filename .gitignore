@@ -18,6 +18,8 @@ go.work
 bump
 dist/
 coverage.out
+.gocache/
+.gomodcache/
 
 # Beads runtime files
 .beads/*.db
