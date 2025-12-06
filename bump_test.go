@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	// "github.com/klauern/bump"
@@ -862,6 +863,83 @@ func TestSetDefaultPushPreference(t *testing.T) {
 	}
 }
 
+// TestSetDefaultPushPreferenceConfigMissing tests SetDefaultPushPreference when config file is missing
+func TestSetDefaultPushPreferenceConfigMissing(t *testing.T) {
+	repo := newTempRepo(t)
+
+	// Remove the config file
+	configPath := filepath.Join(repo, ".git", "config")
+	if err := os.Remove(configPath); err != nil {
+		t.Fatalf("failed to remove config: %v", err)
+	}
+
+	err := SetDefaultPushPreference(repo, true)
+	if err == nil {
+		t.Error("SetDefaultPushPreference should error when config file is missing")
+	}
+}
+
+// TestSetDefaultPushPreferenceReadOnly tests SetDefaultPushPreference with read-only config
+func TestSetDefaultPushPreferenceReadOnly(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping read-only test when running as root")
+	}
+
+	repo := newTempRepo(t)
+	configPath := filepath.Join(repo, ".git", "config")
+
+	// Make config read-only
+	if err := os.Chmod(configPath, 0o444); err != nil {
+		t.Fatalf("failed to chmod config: %v", err)
+	}
+	defer os.Chmod(configPath, 0o644) // Restore permissions for cleanup
+
+	// Make .git directory read-only to prevent temp file creation
+	gitDir := filepath.Join(repo, ".git")
+	if err := os.Chmod(gitDir, 0o555); err != nil {
+		t.Fatalf("failed to chmod .git: %v", err)
+	}
+	defer os.Chmod(gitDir, 0o755) // Restore permissions for cleanup
+
+	err := SetDefaultPushPreference(repo, true)
+	if err == nil {
+		t.Error("SetDefaultPushPreference should error with read-only directory")
+	}
+}
+
+// TestGetDefaultPushPreferenceInvalidConfig tests GetDefaultPushPreference with invalid config content
+func TestGetDefaultPushPreferenceInvalidConfig(t *testing.T) {
+	repo := newTempRepo(t)
+	configPath := filepath.Join(repo, ".git", "config")
+
+	// Write invalid config value
+	cfg := "[bump]\ndefaultPush = invalid_value"
+	if err := os.WriteFile(configPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("failed to write invalid config: %v", err)
+	}
+
+	_, _, err := GetDefaultPushPreference(repo)
+	if err == nil {
+		t.Error("GetDefaultPushPreference should error with invalid config value")
+	}
+}
+
+// TestGetDefaultPushPreferenceCorruptConfig tests GetDefaultPushPreference with corrupted config file
+func TestGetDefaultPushPreferenceCorruptConfig(t *testing.T) {
+	repo := newTempRepo(t)
+	configPath := filepath.Join(repo, ".git", "config")
+
+	// Write corrupted config (invalid INI syntax)
+	if err := os.WriteFile(configPath, []byte("[broken\n"), 0o644); err != nil {
+		t.Fatalf("failed to write corrupt config: %v", err)
+	}
+
+	_, _, err := GetDefaultPushPreference(repo)
+	if err == nil {
+		t.Error("GetDefaultPushPreference should error with corrupted config")
+	}
+}
+
 // TestMockReferenceIterNext tests the Next method of MockReferenceIter
 func TestMockReferenceIterNext(t *testing.T) {
 	refs := []plumbing.Reference{
@@ -995,6 +1073,68 @@ func TestAcquireGitLockInvalidPath(t *testing.T) {
 				t.Errorf("acquireGitLock(%q) should return nil lock for invalid path", tt.repoPath)
 			}
 		})
+	}
+}
+
+// TestAcquireGitLockSuccess tests successful lock acquisition and release
+func TestAcquireGitLockSuccess(t *testing.T) {
+	repo := newTempRepo(t)
+
+	lock, err := acquireGitLock(repo)
+	if err != nil {
+		t.Fatalf("acquireGitLock should succeed for valid repo: %v", err)
+	}
+	if lock == nil {
+		t.Fatal("acquireGitLock should return non-nil lock")
+	}
+	if !lock.acquired {
+		t.Error("lock should be marked as acquired")
+	}
+
+	// Verify lock file was created
+	lockPath := filepath.Join(repo, ".git", "bump.lock")
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		t.Error("lock file should exist after acquisition")
+	}
+
+	// Release the lock
+	if err := lock.Release(); err != nil {
+		t.Errorf("Release should succeed: %v", err)
+	}
+
+	// Verify lock file was removed
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Error("lock file should be removed after release")
+	}
+}
+
+// TestAcquireGitLockStaleLockCleanup tests stale lock detection and removal
+func TestAcquireGitLockStaleLockCleanup(t *testing.T) {
+	repo := newTempRepo(t)
+	lockPath := filepath.Join(repo, ".git", "bump.lock")
+
+	// Create a stale lock file (old timestamp)
+	staleFile, err := os.Create(lockPath)
+	if err != nil {
+		t.Fatalf("failed to create stale lock file: %v", err)
+	}
+	staleFile.Close()
+
+	// Set modification time to 10 minutes ago (definitely stale)
+	staleTime := time.Now().Add(-10 * time.Minute)
+	if err := os.Chtimes(lockPath, staleTime, staleTime); err != nil {
+		t.Fatalf("failed to set stale lock time: %v", err)
+	}
+
+	// Acquire lock should succeed and clean up stale lock
+	lock, err := acquireGitLock(repo)
+	if err != nil {
+		t.Fatalf("acquireGitLock should clean up stale lock and succeed: %v", err)
+	}
+	defer lock.Release()
+
+	if !lock.acquired {
+		t.Error("lock should be acquired after cleaning up stale lock")
 	}
 }
 
