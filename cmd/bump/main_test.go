@@ -214,48 +214,6 @@ func TestValidateFilePathBoundaryChecks(t *testing.T) {
 	}
 }
 
-// TestUpdateVersionFileValidation tests updateVersionFile input validation
-func TestUpdateVersionFileValidation(t *testing.T) {
-	tests := []struct {
-		name        string
-		filePath    string
-		nextTag     string
-		expectError bool
-		errorMsg    string
-	}{
-		{
-			name:        "Empty file path",
-			filePath:    "",
-			nextTag:     "v1.0.0",
-			expectError: true,
-			errorMsg:    "empty",
-		},
-		{
-			name:        "Path traversal attempt",
-			filePath:    "../../../etc/passwd",
-			nextTag:     "v1.0.0",
-			expectError: true,
-			errorMsg:    "invalid",
-		},
-		{
-			name:        "Invalid tag format",
-			filePath:    "version.go",
-			nextTag:     "invalid",
-			expectError: true,
-			errorMsg:    "parse",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := updateVersionFile(tt.filePath, tt.nextTag)
-			if (err != nil) != tt.expectError {
-				t.Errorf("updateVersionFile() error = %v, expectError %v", err, tt.expectError)
-			}
-		})
-	}
-}
-
 // TestBumpVersionNoRepo tests bumpVersion when not in a git repository
 func TestBumpVersionNoRepo(t *testing.T) {
 	// Create a temp directory WITHOUT .git

@@ -5,11 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/klauern/bump"
 	"github.com/urfave/cli/v2"
 )
@@ -142,147 +139,35 @@ func findGitRoot(startPath string) (string, error) {
 	}
 }
 
-// bumpVersion bumps the version of a project's .git directory to the next semantic version passed in as a string.
+// bumpVersion bumps the version using the BumpService.
 func bumpVersion(bumpType, suffix, updateFile string, doPush, dryRun bool) error {
+	// Find git root
 	repoPath, err := findGitRoot(".")
 	if err != nil {
 		return fmt.Errorf("failed to find git root: %v", err)
 	}
 
-	repo, err := git.PlainOpen(repoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open git repo: %v", err)
-	}
-
-	tagRefs, err := repo.Tags()
-	if err != nil {
-		return fmt.Errorf("failed to fetch tags: %v", err)
-	}
-	defer tagRefs.Close()
-
-	latestTag, err := bump.GetLatestTag(tagRefs)
-	if err != nil {
-		return fmt.Errorf("failed to determine latest tag: %v", err)
-	}
-
-	// Use pure function to calculate next version
-	nextTag, err := calculateNextVersion(latestTag, bumpType, suffix)
-	if err != nil {
-		return fmt.Errorf("failed to determine next tag: %v", err)
-	}
-
-	// Print starting message when no tags exist
-	if latestTag == "" {
-		if dryRun {
-			fmt.Println("No tags found, would start at v0.1.0")
-		} else {
-			fmt.Println("No tags found, starting at v0.1.0")
-		}
-	}
-
-	if dryRun {
-		// Use pure function for dry-run message
-		fmt.Print(formatDryRunMessage(nextTag, doPush, updateFile))
-		return nil
-	}
-
-	err = bump.CreateTag(nextTag)
-	if err != nil {
-		return fmt.Errorf("failed to create tag: %v", err)
-	}
-
-	if doPush {
-		err = bump.PushTag()
-		if err != nil {
-			return fmt.Errorf("failed to push tag: %v", err)
-		}
-	}
-
-	// Use pure function for success message
-	fmt.Println(formatBumpMessage(nextTag, doPush))
-
-	if updateFile != "" {
-		err = updateVersionFile(updateFile, nextTag)
-		if err != nil {
-			return fmt.Errorf("failed to update file: %v", err)
-		}
-	}
-	return nil
-}
-
-func updateVersionFile(filePath, nextTag string) error {
-	// Validate and sanitize file path to prevent path traversal
-	repoPath, err := findGitRoot(".")
-	if err != nil {
-		return fmt.Errorf("failed to find git root: %w", err)
-	}
-
-	// Comprehensive path validation and sanitization
-	if err := validateFilePath(filePath, repoPath); err != nil {
-		return fmt.Errorf("invalid file path: %w", err)
-	}
-
-	// Use cleaned path for all subsequent operations
-	cleanPath := filepath.Clean(filePath)
-
-	// Use pure function to calculate development version
-	devVersion, err := calculateDevVersion(nextTag)
-	if err != nil {
-		return fmt.Errorf("failed to calculate dev version: %w", err)
-	}
-
-	// Use VersionFileUpdater to handle file operations
-	updater := NewVersionFileUpdater()
-	node, fset, err := updater.ParseGoFile(cleanPath)
+	// Open repository
+	repo, err := NewGoGitRepository(repoPath)
 	if err != nil {
 		return err
 	}
 
-	if err := updater.UpdateVersionConstant(node, devVersion); err != nil {
-		return err
+	// Create service
+	svc := NewBumpService(repo, nil, os.Stdout)
+
+	// Build options
+	opts := BumpOptions{
+		BumpType:   bumpType,
+		Suffix:     suffix,
+		UpdateFile: updateFile,
+		Push:       doPush,
+		DryRun:     dryRun,
 	}
 
-	if err := updater.WriteFormattedFile(cleanPath, fset, node); err != nil {
-		return err
-	}
-
-	// Use go-git library instead of exec.Command to prevent command injection
-	repo, err := git.PlainOpen(repoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open git repository: %w", err)
-	}
-
-	// Get the working tree
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get working tree: %w", err)
-	}
-
-	// Stage the file
-	relPath, err := filepath.Rel(repoPath, cleanPath)
-	if err != nil {
-		return fmt.Errorf("failed to determine relative path: %w", err)
-	}
-
-	_, err = worktree.Add(relPath)
-	if err != nil {
-		return fmt.Errorf("failed to stage file: %w", err)
-	}
-
-	// Commit the change
-	commitMsg := fmt.Sprintf("Bump version to %s", devVersion)
-	_, err = worktree.Commit(commitMsg, &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "Bump CLI",
-			Email: "bump@localhost",
-			When:  time.Now(),
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to commit file: %w", err)
-	}
-
-	return nil
+	// Execute bump
+	_, err = svc.Bump(opts)
+	return err
 }
 
 // validateFilePath performs comprehensive validation to prevent path traversal attacks
