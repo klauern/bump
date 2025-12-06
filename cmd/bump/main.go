@@ -169,29 +169,24 @@ func bumpVersion(bumpType, suffix, updateFile string, doPush, dryRun bool) error
 		return fmt.Errorf("failed to determine latest tag: %v", err)
 	}
 
-	var nextTag string
-	if latestTag != "" {
-		nextTag, err = bump.GetNextTag(latestTag, bumpType, suffix)
-		if err != nil {
-			return fmt.Errorf("failed to determine next tag: %v", err)
-		}
-	} else {
+	// Use pure function to calculate next version
+	nextTag, err := calculateNextVersion(latestTag, bumpType, suffix)
+	if err != nil {
+		return fmt.Errorf("failed to determine next tag: %v", err)
+	}
+
+	// Print starting message when no tags exist
+	if latestTag == "" {
 		if dryRun {
 			fmt.Println("No tags found, would start at v0.1.0")
 		} else {
 			fmt.Println("No tags found, starting at v0.1.0")
 		}
-		nextTag = "v0.1.0"
 	}
 
 	if dryRun {
-		fmt.Printf("Would create tag: %s\n", nextTag)
-		if doPush {
-			fmt.Println("Would push tag to remote")
-		}
-		if updateFile != "" {
-			fmt.Printf("Would update file: %s\n", updateFile)
-		}
+		// Use pure function for dry-run message
+		fmt.Print(formatDryRunMessage(nextTag, doPush, updateFile))
 		return nil
 	}
 
@@ -205,10 +200,10 @@ func bumpVersion(bumpType, suffix, updateFile string, doPush, dryRun bool) error
 		if err != nil {
 			return fmt.Errorf("failed to push tag: %v", err)
 		}
-		fmt.Printf("Successfully created and pushed tag %s\n", nextTag)
-	} else {
-		fmt.Printf("Successfully created tag %s. To push, run: git push --tags\n", nextTag)
 	}
+
+	// Use pure function for success message
+	fmt.Println(formatBumpMessage(nextTag, doPush))
 
 	if updateFile != "" {
 		err = updateVersionFile(updateFile, nextTag)
@@ -234,14 +229,11 @@ func updateVersionFile(filePath, nextTag string) error {
 	// Use cleaned path for all subsequent operations
 	cleanPath := filepath.Clean(filePath)
 
-	// Parse the next tag
-	nextVersion, ok := bump.ParseTagVersion(nextTag)
-	if !ok {
-		return fmt.Errorf("failed to parse next tag: %s", nextTag)
+	// Use pure function to calculate development version
+	devVersion, err := calculateDevVersion(nextTag)
+	if err != nil {
+		return fmt.Errorf("failed to calculate dev version: %w", err)
 	}
-
-	// Create the development version
-	devVersion := fmt.Sprintf("%d.%d.%d-dev", nextVersion.Major, nextVersion.Minor, nextVersion.Patch+1)
 
 	// Parse the file
 	fset := token.NewFileSet()
