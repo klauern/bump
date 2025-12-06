@@ -29,3 +29,4 @@ coverage.out
 .beads/daemon.pid
 
 !.cursor/
+!.claude
