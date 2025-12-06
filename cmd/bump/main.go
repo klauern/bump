@@ -2,10 +2,6 @@ package main
 
 import (
 	"fmt"
-	"go/ast"
-	"go/format"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -235,49 +231,19 @@ func updateVersionFile(filePath, nextTag string) error {
 		return fmt.Errorf("failed to calculate dev version: %w", err)
 	}
 
-	// Parse the file
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, cleanPath, nil, parser.ParseComments)
+	// Use VersionFileUpdater to handle file operations
+	updater := NewVersionFileUpdater()
+	node, fset, err := updater.ParseGoFile(cleanPath)
 	if err != nil {
-		return fmt.Errorf("failed to parse file: %v", err)
+		return err
 	}
 
-	// Find and update the Version constant
-	updated := false
-	ast.Inspect(node, func(n ast.Node) bool {
-		if gen, ok := n.(*ast.GenDecl); ok && gen.Tok == token.CONST {
-			for _, spec := range gen.Specs {
-				if value, ok := spec.(*ast.ValueSpec); ok {
-					for i, ident := range value.Names {
-						if ident.Name == "Version" {
-							value.Values[i] = &ast.BasicLit{
-								Kind:  token.STRING,
-								Value: fmt.Sprintf(`"%s"`, devVersion),
-							}
-							updated = true
-							return false
-						}
-					}
-				}
-			}
-		}
-		return true
-	})
-
-	if !updated {
-		return fmt.Errorf("version constant not found in file")
+	if err := updater.UpdateVersionConstant(node, devVersion); err != nil {
+		return err
 	}
 
-	// Write the updated AST back to the file
-	var buf strings.Builder
-	err = format.Node(&buf, fset, node)
-	if err != nil {
-		return fmt.Errorf("failed to format updated AST: %v", err)
-	}
-
-	err = os.WriteFile(cleanPath, []byte(buf.String()), 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to write file: %v", err)
+	if err := updater.WriteFormattedFile(cleanPath, fset, node); err != nil {
+		return err
 	}
 
 	// Use go-git library instead of exec.Command to prevent command injection
