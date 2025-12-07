@@ -80,15 +80,21 @@ func (s *BumpService) Bump(opts BumpOptions) (*BumpResult, error) {
 	// Print starting message if no tags exist
 	if latestTag == "" {
 		if opts.DryRun {
-			fmt.Fprintln(s.output, "No tags found, would start at v0.1.0")
+			if _, err := fmt.Fprintln(s.output, "No tags found, would start at v0.1.0"); err != nil {
+				return nil, fmt.Errorf("failed to write output: %w", err)
+			}
 		} else {
-			fmt.Fprintln(s.output, "No tags found, starting at v0.1.0")
+			if _, err := fmt.Fprintln(s.output, "No tags found, starting at v0.1.0"); err != nil {
+				return nil, fmt.Errorf("failed to write output: %w", err)
+			}
 		}
 	}
 
 	// Dry-run mode: preview without making changes
 	if opts.DryRun {
-		fmt.Fprint(s.output, formatDryRunMessage(nextTag, opts.Push, opts.UpdateFile))
+		if _, err := fmt.Fprint(s.output, formatDryRunMessage(nextTag, opts.Push, opts.UpdateFile)); err != nil {
+			return nil, fmt.Errorf("failed to write output: %w", err)
+		}
 		return &BumpResult{
 			NextTag:      nextTag,
 			WouldPush:    opts.Push,
@@ -112,7 +118,9 @@ func (s *BumpService) Bump(opts BumpOptions) (*BumpResult, error) {
 	}
 
 	// Print success message (pure function)
-	fmt.Fprintln(s.output, formatBumpMessage(nextTag, pushed))
+	if _, err := fmt.Fprintln(s.output, formatBumpMessage(nextTag, pushed)); err != nil {
+		return nil, fmt.Errorf("failed to write output: %w", err)
+	}
 
 	// Update version file if requested
 	fileUpdated := false
