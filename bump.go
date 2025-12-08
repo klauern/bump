@@ -143,7 +143,10 @@ type tagVersion struct {
 	Tag    string // Tag is the original git tag string
 }
 
-// NewGitInfo returns the semantic versions of all git tags in the repository at the given path.
+// NewGitInfo scans the git repository at the given path and returns all semantic version tags.
+// It opens the repository, fetches all tags, parses them as semantic versions, and returns
+// the tag strings in descending order (newest first). Returns an error if the repository
+// cannot be opened or tags cannot be fetched.
 func NewGitInfo(path string) ([]string, error) {
 	r, err := openGitRepo(path)
 	if err != nil {
