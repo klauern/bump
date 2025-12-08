@@ -42,6 +42,7 @@ func TestNewBumpService(t *testing.T) {
 			svc := NewBumpService(tt.repo, tt.updater, tt.output)
 			if svc == nil {
 				t.Error("NewBumpService() should not return nil")
+				return
 			}
 			if svc.repo == nil {
 				t.Error("Service repo should not be nil")
@@ -394,7 +395,9 @@ func TestUpdateVersionFile_Errors(t *testing.T) {
 				// Create a valid file for this test
 				tmpDir := t.TempDir()
 				versionFile := filepath.Join(tmpDir, "version.go")
-				os.WriteFile(versionFile, []byte("package main\nconst Version = \"1.0.0\""), 0o644)
+				if err := os.WriteFile(versionFile, []byte("package main\nconst Version = \"1.0.0\""), 0o644); err != nil {
+					t.Fatalf("failed to write version file: %v", err)
+				}
 
 				return "version.go", "invalid", &MockGitRepository{
 					PathFunc: func() string { return tmpDir },
@@ -408,7 +411,9 @@ func TestUpdateVersionFile_Errors(t *testing.T) {
 				// Create a valid file for this test
 				tmpDir := t.TempDir()
 				versionFile := filepath.Join(tmpDir, "version.go")
-				os.WriteFile(versionFile, []byte("package main\nconst Version = \"1.0.0\""), 0o644)
+				if err := os.WriteFile(versionFile, []byte("package main\nconst Version = \"1.0.0\""), 0o644); err != nil {
+					t.Fatalf("failed to write version file: %v", err)
+				}
 
 				return "version.go", "v1.0.0", &MockGitRepository{
 					PathFunc: func() string { return tmpDir },

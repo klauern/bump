@@ -224,7 +224,11 @@ func TestBumpVersionNoRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get current directory: %v", err)
 	}
-	defer os.Chdir(origDir)
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Logf("warning: failed to restore original directory: %v", err)
+		}
+	}()
 
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("failed to change directory: %v", err)

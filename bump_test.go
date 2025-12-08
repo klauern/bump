@@ -892,14 +892,22 @@ func TestSetDefaultPushPreferenceReadOnly(t *testing.T) {
 	if err := os.Chmod(configPath, 0o444); err != nil {
 		t.Fatalf("failed to chmod config: %v", err)
 	}
-	defer os.Chmod(configPath, 0o644) // Restore permissions for cleanup
+	defer func() {
+		if err := os.Chmod(configPath, 0o644); err != nil {
+			t.Logf("warning: failed to restore config permissions: %v", err)
+		}
+	}() // Restore permissions for cleanup
 
 	// Make .git directory read-only to prevent temp file creation
 	gitDir := filepath.Join(repo, ".git")
 	if err := os.Chmod(gitDir, 0o555); err != nil {
 		t.Fatalf("failed to chmod .git: %v", err)
 	}
-	defer os.Chmod(gitDir, 0o755) // Restore permissions for cleanup
+	defer func() {
+		if err := os.Chmod(gitDir, 0o755); err != nil {
+			t.Logf("warning: failed to restore .git permissions: %v", err)
+		}
+	}() // Restore permissions for cleanup
 
 	err := SetDefaultPushPreference(repo, true)
 	if err == nil {
@@ -1118,7 +1126,9 @@ func TestAcquireGitLockStaleLockCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create stale lock file: %v", err)
 	}
-	staleFile.Close()
+	if err := staleFile.Close(); err != nil {
+		t.Fatalf("failed to close stale lock file: %v", err)
+	}
 
 	// Set modification time to 10 minutes ago (definitely stale)
 	staleTime := time.Now().Add(-10 * time.Minute)
@@ -1131,7 +1141,11 @@ func TestAcquireGitLockStaleLockCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquireGitLock should clean up stale lock and succeed: %v", err)
 	}
-	defer lock.Release()
+	defer func() {
+		if err := lock.Release(); err != nil {
+			t.Logf("warning: failed to release lock: %v", err)
+		}
+	}()
 
 	if !lock.acquired {
 		t.Error("lock should be acquired after cleaning up stale lock")
