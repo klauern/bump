@@ -1,4 +1,3 @@
-// Package bump provides functionality for semantic versioning and git tagging.
 package bump
 
 import (
@@ -21,10 +20,11 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/storer"
 )
 
-// execCommand is a variable to hold the exec.Command function for easier testing and mocking.
+// execCommand holds the exec.Command function for easier testing and mocking.
 var execCommand = exec.Command
 
-// semanticVersionRegex is a regular expression for semantic versioning.
+// semanticVersionRegex matches tags in the form `vMAJOR.MINOR.PATCH` with an optional
+// SemVer pre-release suffix (e.g. `-alpha.1`).
 var semanticVersionRegex = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z-.]+)?$`)
 
 // gitLocks stores file-based locks per repository to prevent concurrent git operations.
@@ -33,10 +33,14 @@ var gitLocks = make(map[string]*sync.Mutex)
 // gitLocksMutex protects concurrent access to the gitLocks map.
 var gitLocksMutex sync.RWMutex
 
-// GitLock represents a file-based lock for git operations.
+// GitLock represents a repository-scoped lock used to serialize git operations.
+//
+// This lock is acquired automatically by operations that mutate the repository via
+// external git commands (e.g. creating or pushing tags). Call [GitLock.Release]
+// exactly once to release it.
 type GitLock struct {
-	lockFile string       // lockFile is the path to the lock file
-	acquired bool         // acquired indicates whether the lock has been successfully acquired
+	lockFile string      // lockFile is the path to the lock file
+	acquired bool        // acquired indicates whether the lock has been successfully acquired
 	mutex    *sync.Mutex // mutex is the in-process mutex for this repository
 }
 
@@ -116,7 +120,8 @@ func acquireGitLock(repoPath string) (*GitLock, error) {
 	}, nil
 }
 
-// Release releases the git lock, removing the lock file and releasing the mutex.
+// Release releases the git lock, removing the lock file (if present) and unlocking
+// the in-process mutex.
 func (lock *GitLock) Release() error {
 	if !lock.acquired {
 		return nil
@@ -143,10 +148,12 @@ type tagVersion struct {
 	Tag    string // Tag is the original git tag string
 }
 
-// NewGitInfo scans the git repository at the given path and returns all semantic version tags.
-// It opens the repository, fetches all tags, parses them as semantic versions, and returns
-// the tag strings in descending order (newest first). Returns an error if the repository
-// cannot be opened or tags cannot be fetched.
+// NewGitInfo scans the git repository at path and returns tag references that look like
+// semantic versions (i.e. start with `v`).
+//
+// The returned tag names are sorted newest-first by semantic version precedence.
+// If you need finer-grained access to the parsed version components, use
+// [ParseTagVersion] on individual tags.
 func NewGitInfo(path string) ([]string, error) {
 	r, err := openGitRepo(path)
 	if err != nil {
@@ -197,7 +204,10 @@ func getVersions(tagRefs storer.ReferenceIter) []string {
 	return versions
 }
 
-// ParseTagVersion parses a git tag into a semantic version.
+// ParseTagVersion parses tag into its semantic version components.
+//
+// Tags must match the format `vMAJOR.MINOR.PATCH` with an optional pre-release suffix
+// like `-alpha`, `-beta.1`, etc. It returns (nil, false) if the tag does not match.
 func ParseTagVersion(tag string) (*tagVersion, bool) {
 	matches := semanticVersionRegex.FindStringSubmatch(tag)
 	if matches == nil {
@@ -304,7 +314,10 @@ func parseNumericIdentifier(id string) (int, bool) {
 	return num, true
 }
 
-// GetLatestTag returns the latest semantic version tag in the given git tags.
+// GetLatestTag returns the latest semantic version tag in tagRefs.
+//
+// tagRefs is typically the iterator returned by `repo.Tags()` from `go-git`.
+// If no semantic version tags are found, ("", nil) is returned.
 func GetLatestTag(tagRefs storer.ReferenceIter) (string, error) {
 	versions, err := getTagVersions(tagRefs)
 	if err != nil {
@@ -334,7 +347,10 @@ func getTagVersions(tagRefs storer.ReferenceIter) ([]*tagVersion, error) {
 	return versions, err
 }
 
-// GetNextTag returns the next semantic version tag based on the given current tag and bump type.
+// GetNextTag returns the next semantic version tag based on currentTag and bumpType.
+//
+// bumpType must be one of: "major", "minor", or "patch". If suffix is non-empty, it
+// is added as a SemVer pre-release suffix (without needing to include the leading `-`).
 func GetNextTag(currentTag, bumpType, suffix string) (string, error) {
 	version, ok := ParseTagVersion(currentTag)
 	if !ok {
@@ -386,8 +402,10 @@ func parseInt(s string) int {
 	return i
 }
 
-// CreateTag creates a new git tag with the given tag.
-// Uses concurrency protection to prevent concurrent git operations.
+// CreateTag creates an annotated git tag in the current repository using `git tag`.
+//
+// This function shells out to the `git` executable and uses a per-repository lock to
+// avoid concurrent mutations of the same `.git` directory.
 func CreateTag(tag string) error {
 	repoPath, err := findGitRepoRoot(".")
 	if err != nil {
@@ -397,8 +415,11 @@ func CreateTag(tag string) error {
 	return createTagWithLock(repoPath, tag)
 }
 
-// PushTag pushes the latest git tag to the remote repository.
-// Uses concurrency protection to prevent concurrent git operations.
+// PushTag pushes tags from the current repository to the configured remote using
+// `git push --tags`.
+//
+// This function shells out to the `git` executable and uses a per-repository lock to
+// avoid concurrent mutations of the same `.git` directory.
 func PushTag() error {
 	repoPath, err := findGitRepoRoot(".")
 	if err != nil {
