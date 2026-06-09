@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/log v1.0.0
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/urfave/cli/v2 v2.27.7
-	gopkg.in/ini.v1 v1.67.2
+	gopkg.in/ini.v1 v1.67.3
 )
 
 require (
